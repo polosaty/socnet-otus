@@ -1,0 +1,7 @@
+aiohttp==3.7.4
+aiofiles==0.6.0
+aiohttp_jinja2==1.4.2
+jinja2==2.11.3
+aiomysql==0.0.21
+cryptography==3.4.7
+aiohttp_session==2.9.0

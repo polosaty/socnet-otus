@@ -1,0 +1,5 @@
+.data
+.cache
+.idea
+.local
+__pycache__
