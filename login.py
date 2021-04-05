@@ -1,4 +1,10 @@
+from typing import Any
+from typing import Awaitable
+from typing import Callable
+from typing import Dict
+
 import aiohttp_jinja2
+import aiohttp_session
 import aiomysql
 from aiohttp import web
 
@@ -31,12 +37,24 @@ class User(Model):
         return User(
             uid=adict['id'],
             username=adict['username'],
-            password=adict['password'],
+            password=adict.get('password'),
             firstname=adict['firstname'],
             lastname=adict.get('lastname'),
             sex=adict.get('sex'),
             city=adict.get('city'),
             interest=adict.get('interest'),
+        )
+
+    def to_dict(self):
+        return dict(
+            uid=self.id,
+            username=self.username,
+            password=self.password,
+            firstname=self.firstname,
+            lastname=self.lastname,
+            sex=self.sex,
+            city=self.city,
+            interest=self.interest,
         )
 
     @classmethod
@@ -56,11 +74,40 @@ class User(Model):
             for field in fields:
                 assert hasattr(cls, field), f'unknown field: {field}'
 
-        async with conn.cursor() as cur:
-            await cur.execute(f"SELECT {','.join(fields)} FROM user WHERE id = s(uid)%)",
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(f"SELECT {','.join(fields)} FROM user WHERE id = %(uid)s",
                               dict(uid=uid))
             result = await cur.fetchone()
             return cls.from_dict(result)
+
+
+_WebHandler = Callable[[web.Request], Awaitable[web.StreamResponse]]
+
+
+def require_login(func: _WebHandler) -> _WebHandler:
+    func.__require_login__ = True  # type: ignore
+    return func
+
+
+async def username_ctx_processor(request: web.Request) -> Dict[str, Any]:
+    # Jinja2 context processor
+    session = await aiohttp_session.get_session(request)
+    username = session.get("username")
+    uid = session.get("uid")
+    return {"username": username, "uid": uid}
+
+
+@web.middleware
+async def check_login(request: web.Request,
+                      handler: _WebHandler) -> web.StreamResponse:
+    require_login = getattr(handler, "__require_login__", False)
+    session = await aiohttp_session.get_session(request)
+    username = session.get("username")
+    if require_login:
+        if not username:
+            location = request.app.router['login'].url_for().with_query(dict(next=str(request.rel_url)))
+            raise web.HTTPSeeOther(location=location)
+    return await handler(request)
 
 
 async def validate_login(form, app):
@@ -83,24 +130,38 @@ async def validate_login(form, app):
             return uid, ''
 
 
-async def handle_auth(request: web.Request):
+@aiohttp_jinja2.template('login.jinja2')
+async def handle_login_get(request: web.Request):
+    if 'next' in request.rel_url.query:
+        return {'next': request.rel_url.query['next']}
+    return {}
 
-    data = await request.post()
-    print(data)
+
+async def handle_login_post(request: web.Request):
     # return web.Response(text='OK', content_type="text/html")
     if request.method == 'POST':
         form = await request.post()
         uid, error = await validate_login(form, request.app)
         if error:
-            return {'error': error}
+            response = aiohttp_jinja2.render_template('login.jinja2',
+                                                      request,
+                                                      {'error': error})
+            response.headers['Content-Language'] = 'ru'
+            return response
         else:
             # login form is valid
-            # make session
+            # make session and set token
+            session = await aiohttp_session.get_session(request)
+            session["username"] = form["username"]
+            session["uid"] = uid
 
-            location = request.app.router['index'].url_for()
-            raise web.HTTPFound(location=location)
+            next_location = form.get('next')
+            location = next_location or request.app.router['index'].url_for()
+            response = web.HTTPSeeOther(location)
+            response.cookies['test'] = '1'
+            return response
 
-    return {}
+    return web.HTTPFound(request.app.router['login'].url_for())
 
 
 async def validate_register(form, app):
@@ -158,6 +219,9 @@ async def handle_register(request: web.Request):
         else:
             # login form is valid
             # make session
+            session = await aiohttp_session.get_session(request)
+            session["username"] = form["username"]
+            session["uid"] = uid
 
             location = request.app.router['index'].url_for()
             raise web.HTTPFound(location=location)
