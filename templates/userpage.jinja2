@@ -1,24 +1,37 @@
 <html>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/style.css" type="text/css">
 
+{% include "links.jinja2" %}
 <document>
+    <h2>Данные пользователя:</h2>
 
-    <div class="user">
-        <div class="firstname">
-            Имя: {{ firstname }}
-        </div>
-        <div class="lastname">
-            Фамилия: {{ lastname }}
-        </div>
-        <div class="sex">
-            Пол: {{ sex }}
-        </div>
-        <div class="city">
-            Город: {{ city }}
-        </div>
-        <div class="interest">
-            Интересы: {{ interest }}
-        </div>
+    {%- set user = current_user %}
+    <div style="width: 400pt">
+    {% include "usercard.jinja2" %}
     </div>
+
+    {% if friends %}
+        <br>
+        <div class="friends box">
+        <h2>Друзья:</h2><br>
+        {% for user in friends %}
+        {% include "usercard.jinja2" %}
+        {% endfor %}
+        </div>
+    {% endif %}
+
+
+    {% if subscribers %}
+        <hr>
+        <div class="friends box">
+        Подписчики:<br>
+        {% for user in subscribers %}
+        {% include "usercard.jinja2" %}
+        {% endfor %}
+        </div>
+    {% endif %}
+
 </document>
 
 </html>

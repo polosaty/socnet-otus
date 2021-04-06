@@ -1,85 +1,11 @@
-from typing import Any
-from typing import Awaitable
-from typing import Callable
-from typing import Dict
+from typing import Any, Awaitable, Callable, Dict
 
+from aiohttp import web
 import aiohttp_jinja2
 import aiohttp_session
 import aiomysql
-from aiohttp import web
 
-
-class Model:
-    pass
-
-class User(Model):
-    id = None
-    username = None
-    password = None
-    firstname = None
-    lastname = None
-    sex = None
-    city = None
-    interest = None
-
-    def __init__(self, uid, username, password, firstname=None, lastname=None, sex=None, city=None, interest=None):
-        self.id = uid
-        self.username = username
-        self.password = password
-        self.firstname = firstname
-        self.lastname = lastname
-        self.sex = sex
-        self.city = city
-        self.interest = interest
-
-    @classmethod
-    def from_dict(cls, adict):
-        return User(
-            uid=adict['id'],
-            username=adict['username'],
-            password=adict.get('password'),
-            firstname=adict['firstname'],
-            lastname=adict.get('lastname'),
-            sex=adict.get('sex'),
-            city=adict.get('city'),
-            interest=adict.get('interest'),
-        )
-
-    def to_dict(self):
-        return dict(
-            uid=self.id,
-            username=self.username,
-            password=self.password,
-            firstname=self.firstname,
-            lastname=self.lastname,
-            sex=self.sex,
-            city=self.city,
-            interest=self.interest,
-        )
-
-    @classmethod
-    async def get_by_id(cls, uid, conn, fields: list=None):
-        if not fields:
-            fields = [
-                'id',
-                'username',
-                # 'password',
-                'firstname',
-                'lastname',
-                'sex',
-                'city',
-                'interest',
-            ]
-        else:
-            for field in fields:
-                assert hasattr(cls, field), f'unknown field: {field}'
-
-        async with conn.cursor(aiomysql.DictCursor) as cur:
-            await cur.execute(f"SELECT {','.join(fields)} FROM user WHERE id = %(uid)s",
-                              dict(uid=uid))
-            result = await cur.fetchone()
-            return cls.from_dict(result)
-
+from models import User
 
 _WebHandler = Callable[[web.Request], Awaitable[web.StreamResponse]]
 
@@ -100,10 +26,10 @@ async def username_ctx_processor(request: web.Request) -> Dict[str, Any]:
 @web.middleware
 async def check_login(request: web.Request,
                       handler: _WebHandler) -> web.StreamResponse:
-    require_login = getattr(handler, "__require_login__", False)
+    is_require_login = getattr(handler, "__require_login__", False)
     session = await aiohttp_session.get_session(request)
     username = session.get("username")
-    if require_login:
+    if is_require_login:
         if not username:
             location = request.app.router['login'].url_for().with_query(dict(next=str(request.rel_url)))
             raise web.HTTPSeeOther(location=location)
@@ -113,21 +39,16 @@ async def check_login(request: web.Request,
 async def validate_login(form, app):
     uid = None
     if not ('username' in form
-        and 'password' in form):
+            and 'password' in form):
         return uid, 'username and password required'
     pool: aiomysql.pool.Pool = app['db_pool']
     async with pool.acquire() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute("SELECT id FROM user WHERE username = %(username)s and password = sha(%(password)s)",
-                              dict(username=str(form['username']),
-                                   password=str(form['password'])))
 
-            print(cur.description)
-            result = await cur.fetchone()
-            if not result:
-                return uid, 'wrong username and password combination'
-            uid = result[0]
-            return uid, ''
+        user = await User.get_by_username_and_password(form['username'], form['password'], conn, fields=['id'])
+        if not user:
+            return uid, 'wrong username and password combination'
+        uid = user.id
+        return uid, ''
 
 
 @aiohttp_jinja2.template('login.jinja2')
@@ -158,10 +79,18 @@ async def handle_login_post(request: web.Request):
             next_location = form.get('next')
             location = next_location or request.app.router['index'].url_for()
             response = web.HTTPSeeOther(location)
-            response.cookies['test'] = '1'
+
             return response
 
     return web.HTTPFound(request.app.router['login'].url_for())
+
+
+async def handle_logout_post(request: web.Request):
+    session = await aiohttp_session.get_session(request)
+    session["username"] = None
+    session["uid"] = None
+    location = request.app.router['index'].url_for()
+    return web.HTTPSeeOther(location)
 
 
 async def validate_register(form, app):
@@ -181,28 +110,13 @@ async def validate_register(form, app):
 
     pool: aiomysql.pool.Pool = app['db_pool']
     async with pool.acquire() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute("SELECT id FROM user WHERE username = %(username)s",
-                              dict(username=str(form['username'])))
 
-            result = await cur.fetchone()
-            if result:
-                return uid, 'username already taken'
+        result = await User.get_by_username(username=form['username'], fields=['id'], conn=conn)
+        if result:
+            return uid, 'username already taken'
 
-            await cur.execute(
-                "INSERT INTO user(username, password, firstname, lastname, sex, city, interest) "
-                "VALUES(%(username)s, sha(%(password)s), %(firstname)s, %(lastname)s, %(sex)s, %(city)s, %(interest)s)",
-                dict(
-                    username=form.get('username'),
-                    password=form.get('password'),
-                    firstname=form.get('firstname'),
-                    lastname=form.get('lastname'),
-                    sex=form.get('sex'),
-                    city=form.get('city'),
-                    interest=form.get('interest'),
-                ))
-            uid = cur.lastrowid
-        await conn.commit()
+        uid = await User.from_dict(dict(form, id=None)).save(conn=conn)
+
     return uid, ''
 
 

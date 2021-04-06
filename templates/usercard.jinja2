@@ -1,0 +1,17 @@
+<div class="user" id="{{ user.id }}">
+    <div class="firstname">
+        Имя: {{ user.firstname }}
+    </div>
+    <div class="lastname">
+        Фамилия: {{ user.lastname or '' }}
+    </div>
+    <div class="sex">
+        Пол: {{ user.sex or '' }}
+    </div>
+    <div class="city">
+        Город: {{ user.city or '' }}
+    </div>
+    <div class="interest">
+        Интересы: {{ user.interest or '' }}
+    </div>
+</div>

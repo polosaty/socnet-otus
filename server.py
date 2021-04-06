@@ -1,26 +1,29 @@
 import base64
+import logging
 import os
 
+import aiofiles
+from aiohttp import web
 import aiohttp_jinja2
 import aiohttp_session
-import jinja2
-from cryptography import fernet
-import aiomysql
-from aiohttp import web
-import aiofiles
-from aiohttp_session import setup, get_session, session_middleware
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
+import aiomysql
+from cryptography import fernet
+import jinja2
 
 from login import check_login
 from login import handle_login_get
 from login import handle_login_post
+from login import handle_logout_post
 from login import handle_register
-from userpage import handle_userpage
-import logging
 from login import username_ctx_processor
+from userlist import hanlde_add_friend
+from userlist import hanlde_userlist
+from userpage import handle_userpage
 
 STATIC_DIR = 'static'
 TEMPLATE_DIR = 'templates'
+
 
 def handle_html(file_name):
     async def handle_file(_: web.BaseRequest):
@@ -38,10 +41,16 @@ async def shutdown(app):
         await app['db_pool'].wait_closed()
 
 
-async def test_cooqie(request):
+async def test_cookie(request):
     response = web.HTTPSeeOther('/')
     response.cookies['test'] = '1'
     return response
+
+
+@aiohttp_jinja2.template('index.jinja2')
+async def handle_index(request):
+    session = await aiohttp_session.get_session(request)
+    return dict(session=session)
 
 
 async def make_app():
@@ -49,18 +58,21 @@ async def make_app():
 
     app.add_routes(
         [
-            web.get("/", handle_html('index.html'), name='index'),
+            web.static('/static', STATIC_DIR),
+            web.get("/", handle_index, name='index'),
             web.get("/login/", handle_login_get, name='login'),
             web.post("/login/", handle_login_post),
-            web.get("/test_cooqie/", test_cooqie),
+            web.get("/logout/", handle_logout_post),
+            web.get("/test_cookie/", test_cookie),
             # web.get("/register/", handle_html('register.jinja2')),
             web.get("/register/", handle_register),
             web.post("/register/", handle_register),
             web.get("/userpage/", handle_userpage),
-            # web.get("/userpage/{uid}/", handle_userpage),
+            web.get("/userpage/{uid}/", handle_userpage),
+            web.get("/userlist/", hanlde_userlist),
+            web.post("/add_friend/{uid}/", hanlde_add_friend),
         ]
     )
-
 
     # secret_key must be 32 url-safe base64-encoded bytes
     fernet_key = fernet.Fernet.generate_key()

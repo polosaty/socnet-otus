@@ -1,0 +1,8 @@
+{%- if not session or not session.uid %}
+    {% include "login_block.jinja2" %}
+    <button onclick="window.location = '/register/'" style="width:auto;">Register</button>
+{%- else  %}
+    <button onclick="window.location = '/logout/'" style="width:auto; background: #f44336">Logout</button>
+    <button onclick="window.location = '/userpage/'" style="width:auto;">Страница пользователя</button>
+    <button onclick="window.location = '/userlist/'" style="width:auto;">Список пользователей</button>
+{%- endif %}

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/style.css" type="text/css">
+</head>
+
+{% include "links.jinja2" %}
+
+{% if users %}
+    {%- for user in users %}
+        {% include "usercard.jinja2" %}
+        {%- if not user.is_friend %}
+            {% include "add_friend.jinja2" %}
+        {%- endif %}
+
+        {%- if not loop.last %}
+            <hr>
+        {%- endif %}
+    {%- endfor %}
+    {% if offset > 0 %}
+        <button onclick="window.location = '?offset={{ [offset - limit, 0]|max }}'" style="width:auto;">&lt;</button>
+    {% endif %}
+    {% if not last_page %}
+        <button onclick="window.location = '?offset={{ offset + limit }}'" style="width:auto;">&gt;</button>
+    {% endif %}
+{% endif %}
+
+
+</html>
