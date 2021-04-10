@@ -17,6 +17,9 @@ services:
     image: mysql:5.7.33
     environment:
       MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: socnet
+      MYSQL_USER: socnet
+      MYSQL_PASSWORD: socnetpass
     ports:
       # to connect from localhost
       - 127.0.0.1:3306:3306
@@ -40,14 +43,21 @@ services:
       context: ./
       dockerfile: Dockerfile
     environment:
+      WAIT_HOSTS: db:3306
+      WAIT_HOSTS_TIMEOUT: 300
+      WAIT_SLEEP_INTERVAL: 30
+      WAIT_HOST_CONNECT_TIMEOUT: 30
+
       DATABASE_HOST: db
       DATABASE_PORT: 3306
-      DATABASE_USER: root
-      DATABASE_PASSWORD: password
+      DATABASE_USER: socnet
+      DATABASE_PASSWORD: socnetpass
       DATABASE_DB: socnet
+
     ports:
       - 127.0.0.1:8080:8080
-    command: python server.py
+#    command: /wait ; cd /app/ && python server.py
+    command: ash -c "/wait && python server.py"
     volumes:
       - ./:/app
     depends_on:

@@ -1,6 +1,8 @@
 import base64
 import logging
 import os
+from typing import Any, Dict
+from urllib.parse import urlparse
 
 import aiofiles
 from aiohttp import web
@@ -58,6 +60,35 @@ async def handle_index(request):
     return dict(session=session)
 
 
+async def migrate_schema(pool):
+    conn: aiomysql.connection.Connection
+    async with pool.acquire() as conn:
+        cur: aiomysql.cursors.Cursor
+        async with conn.cursor() as cur:
+            try:
+                await cur.execute("SELECT * FROM user LIMIT 1")
+                await cur.fetchone()
+            except Exception:
+                with open("schema.sql") as f:
+                    schema = f.read()
+                    await cur.execute(schema)
+
+
+def extract_database_credentials(database_url) -> Dict[str, Any]:
+    """Extract database credentials from the database URL.
+    :return: database credentials
+    :rtype: Dict[str, Any]
+    """
+    parsed_url = urlparse(database_url)
+    return {
+        "host": parsed_url.hostname,
+        "port": parsed_url.port or 3306,
+        "user": parsed_url.username,
+        "password": parsed_url.password,
+        "db": parsed_url.path[1:],
+    }
+
+
 async def make_app():
     app = web.Application()
 
@@ -96,22 +127,32 @@ async def make_app():
         context_processors=[username_ctx_processor],
     )
 
+    databse_url = os.getenv('CLEARDB_DATABASE_URL', None)
+    if databse_url:
+        db_credentials = extract_database_credentials(databse_url)
+    else:
+        db_credentials = dict(
+            host=os.environ.get('DATABASE_HOST', 'db'),
+            port=int(os.environ.get('DATABASE_PORT', 3306)),
+            user=os.environ.get('DATABASE_USER', 'root'),
+            password=os.environ.get('DATABASE_PASSWORD', 'password'),
+            db=os.environ.get('DATABASE_DB', 'socnet'))
+
     pool = await aiomysql.create_pool(
-        host=os.environ.get('DATABASE_HOST', 'db'),
-        port=int(os.environ.get('DATABASE_PORT', 3306)),
-        user=os.environ.get('DATABASE_USER', 'root'),
-        password=os.environ.get('DATABASE_PASSWORD', 'password'),
-        db=os.environ.get('DATABASE_DB', 'socnet'),
+        **db_credentials,
         autocommit=True)
 
     app['db_pool'] = pool
+
+    await migrate_schema(pool)
+
     app.on_shutdown.append(shutdown)
     return app
 
 
 def main():
     logging.basicConfig(level=logging.DEBUG)
-    web.run_app(make_app(), port=8080)
+    web.run_app(make_app(), port=int(os.getenv('PORT', 8080)))
 
 
 if __name__ == '__main__':

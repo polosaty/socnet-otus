@@ -20,7 +20,7 @@ async def hanlde_userlist(request: web.Request):
     async with pool.acquire() as conn:
         users = await User.get_by_limit(
             limit=PAGE_SIZE + 1, offset=offset, conn=conn,
-            current_user_id=session['uid'])
+            current_user_id=session['uid']) or []
 
     return dict(users=users[:PAGE_SIZE],
                 offset=offset,
