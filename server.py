@@ -11,6 +11,7 @@ import aiomysql
 from cryptography import fernet
 import jinja2
 
+import api.user as api_user
 from login import check_login
 from login import handle_login_get
 from login import handle_login_post
@@ -18,6 +19,7 @@ from login import handle_logout_post
 from login import handle_register
 from login import username_ctx_processor
 from userlist import hanlde_add_friend
+from userlist import hanlde_del_friend
 from userlist import hanlde_userlist
 from userpage import handle_userpage
 
@@ -50,6 +52,9 @@ async def test_cookie(request):
 @aiohttp_jinja2.template('index.jinja2')
 async def handle_index(request):
     session = await aiohttp_session.get_session(request)
+    if session.get('uid') is not None:
+        raise web.HTTPFound(request.app.router['user_page'].url_for())
+
     return dict(session=session)
 
 
@@ -63,14 +68,17 @@ async def make_app():
             web.get("/login/", handle_login_get, name='login'),
             web.post("/login/", handle_login_post),
             web.get("/logout/", handle_logout_post),
-            web.get("/test_cookie/", test_cookie),
+            # web.get("/test_cookie/", test_cookie),
             # web.get("/register/", handle_html('register.jinja2')),
             web.get("/register/", handle_register),
             web.post("/register/", handle_register),
-            web.get("/userpage/", handle_userpage),
+            web.get("/userpage/", handle_userpage, name='user_page'),
             web.get("/userpage/{uid}/", handle_userpage),
             web.get("/userlist/", hanlde_userlist),
             web.post("/add_friend/{uid}/", hanlde_add_friend),
+            web.post("/del_friend/{uid}/", hanlde_del_friend),
+
+            web.get('/api/user/', api_user.handle_user)
         ]
     )
 
@@ -78,6 +86,7 @@ async def make_app():
     fernet_key = fernet.Fernet.generate_key()
     secret_key = base64.urlsafe_b64decode(fernet_key)
     aiohttp_session.setup(app, EncryptedCookieStorage(secret_key))
+    logging.debug('fernet_key: %r secret_key: %r', fernet_key, secret_key)
     # aiohttp_session.setup(app, aiohttp_session.SimpleCookieStorage())
     app.middlewares.append(check_login)
 
@@ -87,9 +96,14 @@ async def make_app():
         context_processors=[username_ctx_processor],
     )
 
-    pool = await aiomysql.create_pool(host='db', port=3306,
-                                      user='root', password='password',
-                                      db='socnet')
+    pool = await aiomysql.create_pool(
+        host=os.environ.get('DATABASE_HOST', 'db'),
+        port=int(os.environ.get('DATABASE_PORT', 3306)),
+        user=os.environ.get('DATABASE_USER', 'root'),
+        password=os.environ.get('DATABASE_PASSWORD', 'password'),
+        db=os.environ.get('DATABASE_DB', 'socnet'),
+        autocommit=True)
+
     app['db_pool'] = pool
     app.on_shutdown.append(shutdown)
     return app

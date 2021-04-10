@@ -19,7 +19,7 @@ body {
 }
 
 /* Full-width input fields */
-input[type=text], input[type=password] {
+input[type=text], input[type=password], select#sex {
   width: 100%;
   padding: 15px;
   margin: 5px 0 22px 0;
@@ -95,22 +95,27 @@ a {
     <input type="text" placeholder="Фамилия" name="lastname" id="lastname" >
 
     <label for="sex"><b>Пол</b></label>
-    <input type="text" placeholder="Пол" name="sex" id="sex" >
+{#    <input type="text" placeholder="Пол" name="sex" id="sex" >#}
+    <select name="sex" id="sex">
+        <option disabled>Выберите пол</option>
+        <option value="m">мужской</option>
+        <option value="f">женский</option>
+    </select>
 
     <label for="city"><b>Город</b></label>
-    <input type="text" placeholder="Москва" name="city" id="city" >
+    <input type="text" placeholder="" name="city" id="city" >
 
     <label for="interest"><b>Интересы</b></label>
     <input type="text" placeholder="Настольный тенис, котики" name="interest" id="interest" >
 
       <hr>
-    <p>By creating an account you agree to our <a href="#">Terms & Privacy</a>.</p>
+{#    <p>By creating an account you agree to our <a href="#">Terms & Privacy</a>.</p>#}
 
     <button type="submit" class="registerbtn">Register</button>
   </div>
 
   <div class="container signin">
-    <p>Already have an account? <a href="#">Sign in</a>.</p>
+    <p>Already have an account? <a href="/login/">Sign in</a>.</p>
   </div>
 </form>
 

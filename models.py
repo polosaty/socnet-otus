@@ -135,7 +135,7 @@ class User(Model):
             return cls.from_dict(result)
 
     @classmethod
-    async def get_by_limit(cls, conn, current_user_id = None, limit=20, offset=0, fields: list = None):
+    async def get_by_limit(cls, conn, current_user_id: int = None, limit=20, offset=0, fields: list = None):
         if not fields:
             fields = cls._default_fields
         else:
@@ -156,7 +156,7 @@ class User(Model):
             exclude_current = 'WHERE id != %(current_user_id)s'
             query_params['current_user_id'] = current_user_id
 
-        async with conn.cursor(aiomysql.DictCursor) as cur:
+        async with conn.cursor(aiomysql.SSDictCursor) as cur:
             await cur.execute(f"SELECT "
                               f"{','.join(fields)}"
                               f"{is_friend_subquery}"
@@ -171,18 +171,21 @@ class User(Model):
             # return [cls.from_dict(user) for user in result]
             return result
 
-
     async def add_friend(self, friend_id, conn):
         async with conn.cursor() as cur:
             await cur.execute(f"INSERT INTO friend(user_id, friend_id) "
                               f"VALUES(%(uid)s, %(friend_id)s)",
                               dict(uid=self.id, friend_id=friend_id))
-            result = await cur.fetchall()
-            if not result:
-                return None
-            # return [cls.from_dict(user) for user in result]
-            return result
+            inserted_rec_id = cur.lastrowid
+            return inserted_rec_id
 
+    async def del_friend(self, friend_id, conn):
+        async with conn.cursor() as cur:
+            await cur.execute("DELETE FROM friend "
+                              "WHERE user_id=%(uid)s and friend_id=%(friend_id)s",
+                              dict(uid=self.id, friend_id=friend_id))
+            deleted_rows = cur.rowcount
+            return deleted_rows
 
     async def get_friends(self, conn, fields=None, offset=0, limit=20):
         if not fields:
@@ -195,7 +198,7 @@ class User(Model):
         query_params['current_user_id'] = self.id
 
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            fields = map(lambda field: f'u.{field}',  fields)
+            fields = map(lambda field: f'u.{field}', fields)
             await cur.execute(f"SELECT {','.join(fields)} "
                               f"FROM user u "
                               f"JOIN friend f on u.id = f.friend_id "
@@ -221,7 +224,7 @@ class User(Model):
         query_params['current_user_id'] = self.id
 
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            fields = map(lambda field: f'u.{field}',  fields)
+            fields = map(lambda field: f'u.{field}', fields)
             await cur.execute(f"SELECT {','.join(fields)} "
                               f"FROM user u "
                               f"JOIN friend s on u.id = s.user_id "

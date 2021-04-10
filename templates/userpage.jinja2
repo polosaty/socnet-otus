@@ -17,6 +17,7 @@
         <h2>Друзья:</h2><br>
         {% for user in friends %}
         {% include "usercard.jinja2" %}
+        {% include "del_friend.jinja2" %}
         {% endfor %}
         </div>
     {% endif %}
@@ -28,6 +29,7 @@
         Подписчики:<br>
         {% for user in subscribers %}
         {% include "usercard.jinja2" %}
+        {% include "add_friend.jinja2" %}
         {% endfor %}
         </div>
     {% endif %}

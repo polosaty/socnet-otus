@@ -5,13 +5,18 @@
     <div class="lastname">
         Фамилия: {{ user.lastname or '' }}
     </div>
+    {% if user.sex %}
     <div class="sex">
-        Пол: {{ user.sex or '' }}
+        Пол: {%- if user.sex == 'm' %}Мужской{% else %}Женский{% endif %}
     </div>
+    {% endif %}
+
     <div class="city">
         Город: {{ user.city or '' }}
     </div>
+    {% if user.interest %}
     <div class="interest">
         Интересы: {{ user.interest or '' }}
     </div>
+    {% endif %}
 </div>

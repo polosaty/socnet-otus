@@ -19,6 +19,7 @@ RUN apk add --update --no-cache tzdata
 RUN ln -fs /usr/share/zoneinfo/$TZ /etc/localtime
 
 ADD ./requirements.txt /tmp/
+ADD . /app
 
 RUN apk add --virtual .build-deps --no-cache --update \
     cmake make musl-dev gcc g++ gettext-dev libintl git \

@@ -18,12 +18,23 @@ async def handle_userpage(request: web.Request):
         uid = session["uid"]
 
     pool: aiomysql.pool.Pool = request.app['db_pool']
-    async with pool.acquire() as conn1, pool.acquire() as conn2, pool.acquire() as conn3:
 
-        u = User(uid=uid)
-        user, friends, subscribers = await asyncio.gather(
-            User.get_by_id(uid=uid, conn=conn1),
-            u.get_friends(conn=conn2),
-            u.get_subscribers(conn=conn3)
-        )
+    async def get_friends(user):
+        async with pool.acquire() as conn:
+            return await user.get_friends(conn=conn)
+
+    async def get_subscribers(user):
+        async with pool.acquire() as conn:
+            return await user.get_subscribers(conn=conn)
+
+    async def get_user():
+        async with pool.acquire() as conn:
+            return await User.get_by_id(uid=uid, conn=conn)
+
+    u = User(uid=uid)
+    user, friends, subscribers = await asyncio.gather(
+        get_user(),
+        get_friends(user=u),
+        get_subscribers(user=u)
+    )
     return dict(current_user=user, session=session, friends=friends, subscribers=subscribers)
