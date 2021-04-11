@@ -1,7 +1,14 @@
 <div class="user" id="{{ user.id }}">
-    <div class="firstname">
-        Имя: {{ user.firstname }}
-    </div>
+
+        <div class="firstname">
+            Имя:
+            {% if link %}
+                <a href="/userpage/{{ user.id }}/">{{ user.firstname }}</a>
+            {% else %}
+                {{ user.firstname }}
+            {% endif %}
+        </div>
+
     <div class="lastname">
         Фамилия: {{ user.lastname or '' }}
     </div>

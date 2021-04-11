@@ -16,8 +16,11 @@
         <div class="friends box">
         <h2>Друзья:</h2><br>
         {% for user in friends %}
+        {% set link = True %}
         {% include "usercard.jinja2" %}
-        {% include "del_friend.jinja2" %}
+        {% if uid == current_user.id %}
+            {% include "del_friend.jinja2" %}
+        {% endif %}
         {% endfor %}
         </div>
     {% endif %}
@@ -28,8 +31,11 @@
         <div class="friends box">
         <h2>Подписчики:</h2><br>
         {% for user in subscribers %}
+        {% set link = True %}
         {% include "usercard.jinja2" %}
-        {% include "add_friend.jinja2" %}
+        {% if uid == current_user.id %}
+            {% include "add_friend.jinja2" %}
+        {% endif %}
         {% endfor %}
         </div>
     {% endif %}

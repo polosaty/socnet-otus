@@ -9,6 +9,7 @@
 
 {% if users %}
     {%- for user in users %}
+        {% set link=true %}
         {% include "usercard.jinja2" %}
         {%- if not user.is_friend %}
             {% include "add_friend.jinja2" %}
