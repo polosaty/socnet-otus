@@ -4,6 +4,15 @@ import aiomysql
 class Model:
     pass
 
+FILTER_OP = {
+    'eq': '=',
+    'ne': '!=',
+    'lt': '<',
+    'le': '<=',
+    'gt': '>',
+    'ge': '>=',
+    'like': 'like'
+}
 
 class User(Model):
     id = None
@@ -135,7 +144,8 @@ class User(Model):
             return cls.from_dict(result)
 
     @classmethod
-    async def get_by_limit(cls, conn, current_user_id: int = None, limit=20, offset=0, fields: list = None):
+    async def get_by_limit(cls, conn, current_user_id: int = None,
+                           filter: dict = None, limit=20, offset=0, fields: list = None):
         if not fields:
             fields = cls._default_fields
         else:
@@ -145,7 +155,8 @@ class User(Model):
         query_params = dict(limit=int(limit), offset=int(offset))
 
         is_friend_subquery = ''
-        exclude_current = ''
+        where_sql = ''
+        where = []
         if current_user_id is not None:
             is_friend_subquery = (
                 ', EXISTS(SELECT 1 FROM friend f '
@@ -153,22 +164,46 @@ class User(Model):
                 ', EXISTS(SELECT 1 FROM friend f '
                 'WHERE user.id = f.friend_id AND f.user_id = %(current_user_id)s ) is_friend '
             )
-            exclude_current = 'WHERE id != %(current_user_id)s'
+            where.append('id != %(current_user_id)s')
             query_params['current_user_id'] = current_user_id
+
+        def make_param_name(existing_params, param):
+            i = 1
+            param_name = param
+            while param_name in existing_params:
+                param_name = f"{param}_{i}"
+                i += 1
+
+            return param_name
+
+        if filter:
+            for field, value in filter.items():
+                assert hasattr(cls, field), f'unknown field: {field} in filter'
+                op = '='
+                if isinstance(value, dict):
+                    op = FILTER_OP[value['op']]
+                    value = value['v']
+
+                filter_name = make_param_name(query_params, f"{field}_filter")
+                where.append(f"{field} {op} %({filter_name})s")
+                query_params[filter_name] = value
+
+        if where:
+            where_sql = f"WHERE {' AND '.join(where)}"
 
         async with conn.cursor(aiomysql.SSDictCursor) as cur:
             await cur.execute(f"SELECT "
                               f"{','.join(fields)}"
                               f"{is_friend_subquery}"
                               f" FROM user "
-                              f" {exclude_current} "
+                              f" {where_sql} "
                               f" ORDER BY firstname, id "
                               f"LIMIT %(limit)s OFFSET %(offset)s",
                               query_params)
             result = await cur.fetchall()
             if not result:
                 return None
-            # return [cls.from_dict(user) for user in result]
+
             return result
 
     async def add_friend(self, friend_id, conn):

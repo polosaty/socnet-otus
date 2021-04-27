@@ -15,10 +15,19 @@ async def hanlde_userlist(request: web.Request):
     session = await aiohttp_session.get_session(request)
 
     offset = int(request.rel_url.query.get('offset', 0))
+    search = request.rel_url.query.get('search', '')
+    filter = None
+    if search:
+        filter = {
+            'firstname': {'op': 'like', 'v': f"{search}%"},
+            'lastname': {'op': 'like', 'v': f"{search}%"}
+        }
     users = []
     pool: aiomysql.pool.Pool = request.app['db_pool']
     async with pool.acquire() as conn:
         users = await User.get_by_limit(
+            filter=filter,
+            fields=['id', 'firstname', 'lastname'],
             limit=PAGE_SIZE + 1, offset=offset, conn=conn,
             current_user_id=session['uid']) or []
 
@@ -26,7 +35,9 @@ async def hanlde_userlist(request: web.Request):
                 offset=offset,
                 limit=PAGE_SIZE,
                 session=session,
-                last_page=len(users) <= PAGE_SIZE)
+                last_page=len(users) <= PAGE_SIZE,
+                search=search,
+                )
 
 
 @require_login

@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS `user` (
   UNIQUE KEY `username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
 
+create index if not exists user_lastname_firstname_index on user (lastname, firstname);
+
 -- DROP TABLE IF EXISTS `friend`;
 CREATE TABLE IF NOT EXISTS `friend` (
   `id` int(11) NOT NULL AUTO_INCREMENT,

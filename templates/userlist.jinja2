@@ -4,10 +4,28 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/static/style.css" type="text/css">
 </head>
+<script>
+    function nextPage(offset) {
+        let baseSearch = new URLSearchParams(window.location.search);
+        baseSearch.set("offset", offset)
+        window.location.search = baseSearch.toString()
+    }
+</script>
 
 {% include "links.jinja2" %}
+<form method="get">
+    <input type="text" name="search" placeholder="Поиск" value="{{ search }}">
+</form>
 
 {% if users %}
+
+    {% if offset > 0 %}
+        <button onclick="nextPage({{ [offset - limit, 0]|max }})" style="width:auto;">&lt;</button>
+    {% endif %}
+    {% if not last_page %}
+        <button onclick="nextPage({{ offset + limit }})" style="width:auto;">&gt;</button>
+    {% endif %}
+
     {%- for user in users %}
         {% set link=true %}
         {% include "usercard.jinja2" %}
@@ -19,12 +37,14 @@
             <hr>
         {%- endif %}
     {%- endfor %}
+
     {% if offset > 0 %}
-        <button onclick="window.location = '?offset={{ [offset - limit, 0]|max }}'" style="width:auto;">&lt;</button>
+        <button onclick="nextPage({{ [offset - limit, 0]|max }})" style="width:auto;">&lt;</button>
     {% endif %}
     {% if not last_page %}
-        <button onclick="window.location = '?offset={{ offset + limit }}'" style="width:auto;">&gt;</button>
+        <button onclick="nextPage({{ offset + limit }})" style="width:auto;">&gt;</button>
     {% endif %}
+
 {% endif %}
 
 

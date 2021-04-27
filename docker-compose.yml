@@ -26,7 +26,7 @@ services:
     volumes:
       - ./.data:/var/lib/mysql
       - ./.logs/mysql:/var/log/mysql
-    mem_limit: 3000M
+    mem_limit: 6000M
 
   adminer:
     image: adminer
@@ -62,3 +62,9 @@ services:
       - ./:/app
     depends_on:
       - db
+
+  wrk:
+    image: williamyeh/wrk:latest
+    depends_on:
+      - app
+

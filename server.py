@@ -140,6 +140,7 @@ async def make_app():
 
     pool = await aiomysql.create_pool(
         **db_credentials,
+        maxsize=50,
         autocommit=True)
 
     app['db_pool'] = pool
