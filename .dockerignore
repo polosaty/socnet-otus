@@ -1,4 +1,5 @@
-.data
+.data*
+docker
 .logs
 .idea
 .local

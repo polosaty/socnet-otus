@@ -23,7 +23,8 @@ async def hanlde_userlist(request: web.Request):
             'lastname': {'op': 'like', 'v': f"{search}%"}
         }
     users = []
-    pool: aiomysql.pool.Pool = request.app['db_pool']
+    # pool: aiomysql.pool.Pool = request.app['db_pool']
+    pool: aiomysql.pool.Pool = request.app['db_ro_pool']
     async with pool.acquire() as conn:
         users = await User.get_by_limit(
             filter=filter,

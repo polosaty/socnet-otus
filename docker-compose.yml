@@ -25,8 +25,58 @@ services:
       - 127.0.0.1:3306:3306
     volumes:
       - ./.data:/var/lib/mysql
-      - ./.logs/mysql:/var/log/mysql
+      - ./docker/db/master.cnf:/etc/mysql/mysql.conf.d/mysqld.cnf
+      # - ./.logs/mysql:/var/log/mysql
     mem_limit: 6000M
+
+  db_slave_1:
+    image: mysql:5.7.33
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: socnet
+      MYSQL_USER: socnet
+      MYSQL_PASSWORD: socnetpass
+    ports:
+      # to connect from localhost
+      - 127.0.0.1:3307:3306
+    volumes:
+      - ./.data_db_slave_1:/var/lib/mysql
+      - ./docker/db/slave_1.cnf:/etc/mysql/mysql.conf.d/mysqld.cnf
+      # - ./.logs/mysql:/var/log/mysql
+    depends_on:
+      - db
+    mem_limit: 6000M
+
+  db_slave_2:
+    image: mysql:5.7.33
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: socnet
+      MYSQL_USER: socnet
+      MYSQL_PASSWORD: socnetpass
+    ports:
+      # to connect from localhost
+      - 127.0.0.1:3308:3306
+    volumes:
+      - ./.data_db_slave_2:/var/lib/mysql
+      - ./docker/db/slave_2.cnf:/etc/mysql/mysql.conf.d/mysqld.cnf
+      # - ./.logs/mysql:/var/log/mysql
+    depends_on:
+      - db
+    mem_limit: 6000M
+
+  db_balancer:
+    image: haproxy:2.4.0-alpine
+    volumes:
+      - ./docker/haproxy_mysql.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - 127.0.0.1:8082:8080
+      - 3306
+      - 3307
+    depends_on:
+      - db
+      - db_slave_1
+      - db_slave_2
 
   adminer:
     image: adminer
@@ -35,6 +85,7 @@ services:
       - 8081:8080
     depends_on:
       - db
+      - db_slave_1
 
   app:
     tty: true
@@ -43,16 +94,16 @@ services:
       context: ./
       dockerfile: Dockerfile
     environment:
-      WAIT_HOSTS: db:3306
+      WAIT_HOSTS: db:3306, db_balancer:3306, db_balancer:3307
       WAIT_HOSTS_TIMEOUT: 300
       WAIT_SLEEP_INTERVAL: 30
       WAIT_HOST_CONNECT_TIMEOUT: 30
 
-      DATABASE_HOST: db
-      DATABASE_PORT: 3306
-      DATABASE_USER: socnet
-      DATABASE_PASSWORD: socnetpass
-      DATABASE_DB: socnet
+#      DATABASE_URL: mysql://socnet:socnetpass@db:3306/socnet
+#      DATABASE_RO_URL: mysql://socnet_ro:socnetpass@db_slave_1:3306/socnet
+      DATABASE_URL: mysql://socnet:socnetpass@db_balancer:3306/socnet
+      DATABASE_RO_URL: mysql://socnet_ro:socnetpass@db_balancer:3307/socnet
+
 
     ports:
       - 127.0.0.1:8080:8080
@@ -62,6 +113,7 @@ services:
       - ./:/app
     depends_on:
       - db
+      - db_balancer
 
   wrk:
     image: williamyeh/wrk:latest

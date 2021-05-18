@@ -25,7 +25,8 @@ async def handle_userpage(request: web.Request):
     if not current_user_uid:
         current_user_uid = uid
 
-    pool: aiomysql.pool.Pool = request.app['db_pool']
+    # pool: aiomysql.pool.Pool = request.app['db_pool']
+    pool: aiomysql.pool.Pool = request.app['db_ro_pool']
 
     async def get_friends(user):
         async with pool.acquire() as conn:

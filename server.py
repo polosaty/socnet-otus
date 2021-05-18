@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import logging
 import os
@@ -40,15 +41,14 @@ def handle_html(file_name):
 
 async def shutdown(app):
     db_pool = app['db_pool']
-    if db_pool:
-        db_pool.close()
-        await app['db_pool'].wait_closed()
+    db_ro_pool = app['db_ro_pool']
 
+    def close_pools(*db_pools):
+        for pool in db_pools:
+            pool.close()
+            yield pool.wait_closed()
 
-async def test_cookie(request):
-    response = web.HTTPSeeOther('/')
-    response.cookies['test'] = '1'
-    return response
+    await asyncio.gather(list(close_pools(db_pool, db_ro_pool)))
 
 
 @aiohttp_jinja2.template('index.jinja2')
@@ -99,7 +99,6 @@ async def make_app():
             web.get("/login/", handle_login_get, name='login'),
             web.post("/login/", handle_login_post),
             web.get("/logout/", handle_logout_post),
-            # web.get("/test_cookie/", test_cookie),
             # web.get("/register/", handle_html('register.jinja2')),
             web.get("/register/", handle_register),
             web.post("/register/", handle_register),
@@ -127,23 +126,21 @@ async def make_app():
         context_processors=[username_ctx_processor],
     )
 
-    databse_url = os.getenv('CLEARDB_DATABASE_URL', None)
-    if databse_url:
-        db_credentials = extract_database_credentials(databse_url)
-    else:
-        db_credentials = dict(
-            host=os.environ.get('DATABASE_HOST', 'db'),
-            port=int(os.environ.get('DATABASE_PORT', 3306)),
-            user=os.environ.get('DATABASE_USER', 'root'),
-            password=os.environ.get('DATABASE_PASSWORD', 'password'),
-            db=os.environ.get('DATABASE_DB', 'socnet'))
+    databse_url = os.getenv('CLEARDB_DATABASE_URL', None) or os.getenv('DATABASE_URL', None)
 
     pool = await aiomysql.create_pool(
-        **db_credentials,
+        **extract_database_credentials(databse_url),
+        maxsize=50,
+        autocommit=True)
+
+    databse_ro_url = os.getenv('DATABASE_RO_URL', None)
+    ro_pool = await aiomysql.create_pool(
+        **extract_database_credentials(databse_ro_url),
         maxsize=50,
         autocommit=True)
 
     app['db_pool'] = pool
+    app['db_ro_pool'] = ro_pool
 
     await migrate_schema(pool)
 

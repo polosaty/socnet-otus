@@ -123,8 +123,7 @@ async def validate_register(form, app):
 @aiohttp_jinja2.template('register.jinja2')
 async def handle_register(request: web.Request):
     data = await request.post()
-    print(data)
-    # return web.Response(text='OK', content_type="text/html")
+
     if request.method == 'POST':
         form = await request.post()
         uid, error = await validate_register(form, request.app)
