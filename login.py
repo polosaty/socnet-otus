@@ -5,7 +5,7 @@ import aiohttp_jinja2
 import aiohttp_session
 import aiomysql
 
-from models import User
+from models.user import User
 
 _WebHandler = Callable[[web.Request], Awaitable[web.StreamResponse]]
 

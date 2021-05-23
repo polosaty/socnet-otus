@@ -1,0 +1,21 @@
+<div class="post" id="{{ post.id }}">
+
+    <div class="text">
+        <p>{{ post.text }}</p>
+    </div>
+    <div class="created_at">
+        {% if post.author__name %}
+        <a href="/userpage/{{ post.author_id }}/">{{ post.author__name }}</a> {{ post.created_at }}
+        {% else %}
+        <p>{{ post.created_at }}</p>
+        {% endif %}
+
+    </div>
+    {% if post.updated_at %}
+    <div class="updated_at">
+        <p>{{ post.updated_at }}</p>
+
+    </div>
+    {% endif %}
+
+</div>

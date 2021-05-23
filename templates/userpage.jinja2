@@ -40,6 +40,19 @@
         </div>
     {% endif %}
 
+    {% if posts %}
+        <hr>
+        <div class="posts box">
+        <h2>Посты:</h2><br>
+        {% for post in posts %}
+        {% include "post.jinja2" %}
+        {%- if not loop.last %}
+            <hr>
+        {%- endif %}
+        {% endfor %}
+        </div>
+    {% endif %}
+
 </document>
 
 </html>

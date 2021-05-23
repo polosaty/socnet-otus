@@ -21,6 +21,7 @@ from login import handle_login_post
 from login import handle_logout_post
 from login import handle_register
 from login import username_ctx_processor
+from news import hanlde_newspage
 from userlist import hanlde_add_friend
 from userlist import hanlde_del_friend
 from userlist import hanlde_userlist
@@ -39,16 +40,9 @@ def handle_html(file_name):
     return handle_file
 
 
-async def shutdown(app):
-    db_pool = app['db_pool']
-    db_ro_pool = app['db_ro_pool']
-
-    def close_pools(*db_pools):
-        for pool in db_pools:
-            pool.close()
-            yield pool.wait_closed()
-
-    await asyncio.gather(list(close_pools(db_pool, db_ro_pool)))
+async def close_db_pool(dp_pool):
+    dp_pool.close()
+    await dp_pool.wait_closed()
 
 
 @aiohttp_jinja2.template('index.jinja2')
@@ -96,19 +90,23 @@ async def make_app():
         [
             web.static('/static', STATIC_DIR),
             web.get("/", handle_index, name='index'),
+
             web.get("/login/", handle_login_get, name='login'),
             web.post("/login/", handle_login_post),
             web.get("/logout/", handle_logout_post),
             # web.get("/register/", handle_html('register.jinja2')),
             web.get("/register/", handle_register),
             web.post("/register/", handle_register),
+
             web.get("/userpage/", handle_userpage, name='user_page'),
             web.get("/userpage/{uid}/", handle_userpage),
             web.get("/userlist/", hanlde_userlist),
             web.post("/add_friend/{uid}/", hanlde_add_friend),
             web.post("/del_friend/{uid}/", hanlde_del_friend),
 
-            web.get('/api/user/', api_user.handle_user)
+            web.get("/newspage/", hanlde_newspage, name='news_page'),
+
+            web.get('/api/user/', api_user.handle_user),
         ]
     )
 
@@ -132,19 +130,24 @@ async def make_app():
         **extract_database_credentials(databse_url),
         maxsize=50,
         autocommit=True)
+    app['db_pool'] = pool
+    app.on_shutdown.append(lambda _app: close_db_pool(_app['db_pool']))
 
     databse_ro_url = os.getenv('DATABASE_RO_URL', None)
-    ro_pool = await aiomysql.create_pool(
-        **extract_database_credentials(databse_ro_url),
-        maxsize=50,
-        autocommit=True)
+    if databse_ro_url:
+        ro_pool = await aiomysql.create_pool(
+            **extract_database_credentials(databse_ro_url),
+            maxsize=50,
+            autocommit=True)
 
-    app['db_pool'] = pool
-    app['db_ro_pool'] = ro_pool
+        app['db_ro_pool'] = ro_pool
+        app.on_shutdown.append(lambda _app: close_db_pool(_app['db_ro_pool']))
+    else:
+        logging.warning('DATABASE_RO_URL not set')
+        app['db_ro_pool'] = pool
 
     await migrate_schema(pool)
 
-    app.on_shutdown.append(shutdown)
     return app
 
 

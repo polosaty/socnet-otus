@@ -1,20 +1,13 @@
 import aiomysql
 
+from .base import FILTER_OP
+from .base import make_param_name
+from .base import Model
 
-class Model:
-    pass
-
-FILTER_OP = {
-    'eq': '=',
-    'ne': '!=',
-    'lt': '<',
-    'le': '<=',
-    'gt': '>',
-    'ge': '>=',
-    'like': 'like'
-}
 
 class User(Model):
+    _table_name = 'user'
+
     id = None
     username = None
     password = None
@@ -70,28 +63,16 @@ class User(Model):
         )
 
     @classmethod
-    async def get_by_id(cls, uid, conn, fields: list = None):
-        if not fields:
-            fields = cls._default_fields
-        else:
-            for field in fields:
-                assert hasattr(cls, field), f'unknown field: {field}'
-
-        async with conn.cursor(aiomysql.DictCursor) as cur:
-            await cur.execute(f"SELECT {','.join(fields)} FROM user WHERE id = %(uid)s",
-                              dict(uid=uid))
-            result = await cur.fetchone()
-            if not result:
-                return None
-            return cls.from_dict(result)
+    def get_by_id(cls, uid, conn, fields: list = None):
+        return super(User, cls).get_by_id(uid, conn, fields)
 
     async def save(self, conn):
         async with conn.cursor() as cur:
             if not self.id:
                 await cur.execute(
-                    "INSERT INTO user(username, password, firstname, lastname, sex, city, interest) "
-                    "VALUES(%(username)s, sha(%(password)s), %(firstname)s, %(lastname)s, "
-                    "%(sex)s, %(city)s, %(interest)s)",
+                    f"INSERT INTO {self._table_name}(username, password, firstname, lastname, sex, city, interest) "
+                    f"VALUES(%(username)s, sha(%(password)s), %(firstname)s, %(lastname)s, "
+                    f"%(sex)s, %(city)s, %(interest)s)",
                     dict(
                         username=self.username,
                         password=self.password,
@@ -144,8 +125,8 @@ class User(Model):
             return cls.from_dict(result)
 
     @classmethod
-    async def get_by_limit(cls, conn, current_user_id: int = None,
-                           filter: dict = None, limit=20, offset=0, fields: list = None):
+    async def filter(cls, conn, current_user_id: int = None,
+                     filter: dict = None, limit=20, offset=0, fields: list = None):
         if not fields:
             fields = cls._default_fields
         else:
@@ -167,15 +148,6 @@ class User(Model):
             where.append('id != %(current_user_id)s')
             query_params['current_user_id'] = current_user_id
 
-        def make_param_name(existing_params, param):
-            i = 1
-            param_name = param
-            while param_name in existing_params:
-                param_name = f"{param}_{i}"
-                i += 1
-
-            return param_name
-
         if filter:
             for field, value in filter.items():
                 assert hasattr(cls, field), f'unknown field: {field} in filter'
@@ -195,7 +167,7 @@ class User(Model):
             await cur.execute(f"SELECT "
                               f"{','.join(fields)}"
                               f"{is_friend_subquery}"
-                              f" FROM user "
+                              f" FROM {cls._table_name} "
                               f" {where_sql} "
                               f" ORDER BY firstname, id "
                               f"LIMIT %(limit)s OFFSET %(offset)s",
@@ -208,8 +180,8 @@ class User(Model):
 
     async def add_friend(self, friend_id, conn):
         async with conn.cursor() as cur:
-            await cur.execute(f"INSERT INTO friend(user_id, friend_id) "
-                              f"VALUES(%(uid)s, %(friend_id)s)",
+            await cur.execute("INSERT INTO friend(user_id, friend_id) "
+                              "VALUES(%(uid)s, %(friend_id)s)",
                               dict(uid=self.id, friend_id=friend_id))
             inserted_rec_id = cur.lastrowid
             return inserted_rec_id

@@ -4,7 +4,7 @@ import aiohttp_session
 import aiomysql
 
 from login import require_login
-from models import User
+from models.user import User
 
 PAGE_SIZE = 20
 
@@ -26,7 +26,7 @@ async def hanlde_userlist(request: web.Request):
     # pool: aiomysql.pool.Pool = request.app['db_pool']
     pool: aiomysql.pool.Pool = request.app['db_ro_pool']
     async with pool.acquire() as conn:
-        users = await User.get_by_limit(
+        users = await User.filter(
             filter=filter,
             fields=['id', 'firstname', 'lastname'],
             limit=PAGE_SIZE + 1, offset=offset, conn=conn,

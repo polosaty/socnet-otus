@@ -6,7 +6,8 @@ import aiohttp_session
 import aiomysql
 
 from login import require_login
-from models import User
+from models.post import Post
+from models.user import User
 
 
 @require_login
@@ -25,7 +26,6 @@ async def handle_userpage(request: web.Request):
     if not current_user_uid:
         current_user_uid = uid
 
-    # pool: aiomysql.pool.Pool = request.app['db_pool']
     pool: aiomysql.pool.Pool = request.app['db_ro_pool']
 
     async def get_friends(user):
@@ -40,10 +40,15 @@ async def handle_userpage(request: web.Request):
         async with pool.acquire() as conn:
             return await User.get_by_id(uid=current_user_uid, conn=conn)
 
+    async def get_posts(user):
+        async with pool.acquire() as conn:
+            return await Post.filter(filter=dict(author_id=user.id), conn=conn)
+
     u = User(uid=current_user_uid)
-    user, friends, subscribers = await asyncio.gather(
+    user, friends, subscribers, posts = await asyncio.gather(
         get_user(),
         get_friends(user=u),
-        get_subscribers(user=u)
+        get_subscribers(user=u),
+        get_posts(user=u)
     )
-    return dict(current_user=user, session=session, friends=friends, subscribers=subscribers, uid=uid)
+    return dict(current_user=user, session=session, friends=friends, subscribers=subscribers, posts=posts, uid=uid)

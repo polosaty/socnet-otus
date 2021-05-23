@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/style.css" type="text/css">
+</head>
+<script>
+    function nextPage(offset) {
+        let baseSearch = new URLSearchParams(window.location.search);
+        baseSearch.set("offset", offset)
+        window.location.search = baseSearch.toString()
+    }
+</script>
+
+{% include "links.jinja2" %}
+
+{% if posts %}
+
+    {% if offset and offset > 0 %}
+        <button onclick="nextPage({{ [offset - limit, 0]|max }})" style="width:auto;">&lt;</button>
+    {% endif %}
+    {% if offset and not last_page %}
+        <button onclick="nextPage({{ offset + limit }})" style="width:auto;">&gt;</button>
+    {% endif %}
+
+    {%- for post in posts %}
+        {% include "post.jinja2" %}
+        {%- if not loop.last %}
+            <hr>
+        {%- endif %}
+    {%- endfor %}
+
+    {% if offset and offset > 0 %}
+        <button onclick="nextPage({{ [offset - limit, 0]|max }})" style="width:auto;">&lt;</button>
+    {% endif %}
+    {% if offset and not last_page %}
+        <button onclick="nextPage({{ offset + limit }})" style="width:auto;">&gt;</button>
+    {% endif %}
+
+{% endif %}
+
+
+</html>
