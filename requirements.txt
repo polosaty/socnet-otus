@@ -5,3 +5,4 @@ jinja2==2.11.3
 aiomysql==0.0.21
 cryptography==3.4.7
 aiohttp_session==2.9.0
+arq>=0.20

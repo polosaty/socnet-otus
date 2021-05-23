@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import logging
 import os
@@ -11,6 +10,7 @@ import aiohttp_jinja2
 import aiohttp_session
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
 import aiomysql
+import arq
 from cryptography import fernet
 import jinja2
 
@@ -21,6 +21,7 @@ from login import handle_login_post
 from login import handle_logout_post
 from login import handle_register
 from login import username_ctx_processor
+from news import hanlde_add_post
 from news import hanlde_newspage
 from userlist import hanlde_add_friend
 from userlist import hanlde_del_friend
@@ -60,7 +61,7 @@ async def migrate_schema(pool):
         cur: aiomysql.cursors.Cursor
         async with conn.cursor() as cur:
             try:
-                await cur.execute("SELECT * FROM user LIMIT 1")
+                await cur.execute("SELECT * FROM post LIMIT 1")
                 await cur.fetchone()
             except Exception:
                 with open("schema.sql") as f:
@@ -105,6 +106,7 @@ async def make_app():
             web.post("/del_friend/{uid}/", hanlde_del_friend),
 
             web.get("/newspage/", hanlde_newspage, name='news_page'),
+            web.post("/add_post/", hanlde_add_post),
 
             web.get('/api/user/', api_user.handle_user),
         ]
@@ -145,6 +147,16 @@ async def make_app():
     else:
         logging.warning('DATABASE_RO_URL not set')
         app['db_ro_pool'] = pool
+
+    redis_url = os.getenv('REDIS_URL', None)
+    if redis_url:
+        app['arq_pool'] = await arq.create_pool(arq.connections.RedisSettings.from_dsn(redis_url))
+
+        async def close_arq_pool(_app):
+            _app['arq_pool'].close()
+            await _app['arq_pool'].wait_closed()
+
+        app.on_shutdown.append(close_arq_pool)
 
     await migrate_schema(pool)
 

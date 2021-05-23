@@ -23,7 +23,6 @@ ADD https://github.com/ufoscout/docker-compose-wait/releases/download/$WAIT_VERS
 RUN chmod +x /wait
 
 ADD ./requirements.txt /tmp/
-ADD . /app
 
 RUN apk add --virtual .build-deps --no-cache --update \
     cmake make musl-dev gcc g++ gettext-dev libintl git \
@@ -42,6 +41,8 @@ RUN apk add --virtual .build-deps --no-cache --update \
         --home /app \
     app && \
     chown -R app:app /app
+
+ADD . /app
 
 USER app
 

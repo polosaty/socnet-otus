@@ -1,1 +1,1 @@
-create index if not exists user_lastname_firstname_index on user (lastname, firstname);
+CREATE INDEX IF NOT EXISTS `user_lastname_firstname_id_index` ON `USER`(`lastname`, `firstname`, `id`);

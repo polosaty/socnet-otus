@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS `user` (
   UNIQUE KEY `username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
 
-create index if not exists user_lastname_firstname_index on user (lastname, firstname);
+CREATE INDEX /*IF NOT EXISTS*/ `user_lastname_firstname_id_index` ON `USER`(`lastname`, `firstname`, `id`);
 
 -- DROP TABLE IF EXISTS `friend`;
 CREATE TABLE IF NOT EXISTS `friend` (
@@ -35,3 +35,13 @@ CREATE TABLE IF NOT EXISTS `friend` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
 
 -- 2021-04-07 15:05:13
+
+-- DROP TABLE IF EXISTS `post`;
+CREATE TABLE IF NOT EXISTS `post` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `author_id` bigint(20) NOT NULL,
+  `text` text NOT NULL,
+  `created_at` timestamp NOT NULL,
+  `updated_at` timestamp NULL ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (`author_id`) REFERENCES `user` (`id`) ON DELETE CASCADE
+) ENGINE='InnoDB'  DEFAULT CHARSET=utf8 COLLATE=utf8_bin;

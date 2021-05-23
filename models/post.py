@@ -86,6 +86,10 @@ class Post(Model):
                     fields.append(" concat(author.firstname, ' ' , author.lastname) as author__name ")
                     continue
                 assert hasattr(cls, field), f'unknown field: {field}'
+        fields = [
+            (f"{cls._table_name}.{field}" if field in cls._default_fields else field)
+            for field in fields
+        ]
 
         query_params = dict(limit=int(limit), offset=int(offset))
 
@@ -103,14 +107,12 @@ class Post(Model):
                     value = value['v']
 
                 filter_name = make_param_name(query_params, f"{field}_filter")
+                field = (f"{cls._table_name}.{field}" if field in cls._default_fields else field)
                 where.append(f"{field} {op} %({filter_name})s")
                 query_params[filter_name] = value
 
         if joins:
             join_sql = ''.join(joins)
-            fields = [
-                (f"{cls._table_name}.{field}" if field in cls._default_fields else field) for field in fields
-            ]
 
         if where:
             where_sql = f"WHERE {' AND '.join(where)}"
@@ -126,7 +128,4 @@ class Post(Model):
                               f" LIMIT %(limit)s OFFSET %(offset)s",
                               query_params)
             result = await cur.fetchall()
-            if not result:
-                return None
-
-            return result
+            return result or []

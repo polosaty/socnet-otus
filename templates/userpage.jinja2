@@ -53,6 +53,17 @@
         </div>
     {% endif %}
 
+{% if uid == current_user.id %}
+    <div id="add_post_form">
+        <form action="/add_post/" method="post">
+            <textarea name="text" placeholder="What's new?" style="width: 540px; height: 100px;"></textarea><br>
+            <button type="submit" style="width: auto">Post</button>
+        </form>
+    </div>
+{% endif %}
+
+
+
 </document>
 
 </html>

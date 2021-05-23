@@ -76,6 +76,9 @@ async def handle_login_post(request: web.Request):
             session["username"] = form["username"]
             session["uid"] = uid
 
+            if request.app.get('arq_pool'):
+                await request.app['arq_pool'].enqueue_job('build_news_cache', user_id=uid)
+
             next_location = form.get('next')
             location = next_location or request.app.router['index'].url_for()
             response = web.HTTPSeeOther(location)

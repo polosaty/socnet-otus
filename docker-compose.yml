@@ -29,8 +29,11 @@ services:
       # - ./.logs/mysql:/var/log/mysql
     mem_limit: 6000M
 
-  cache:
-    image: memcached:1.6.9-alpine
+
+  redis:
+    image: redis:6.2.3-alpine
+    volumes:
+      - ./.data_redis:/data
 
   db_slave_1:
     image: mysql:5.7.33
@@ -86,9 +89,6 @@ services:
     restart: always
     ports:
       - 8081:8080
-#    depends_on:
-#      - db
-#      - db_slave_1
 
   app:
     tty: true
@@ -96,7 +96,7 @@ services:
     build:
       context: ./
       dockerfile: Dockerfile
-    image: &app app
+    image: &app socnet-app
     environment:
       WAIT_HOSTS: db:3306, db_balancer:3306, db_balancer:3307
       WAIT_HOSTS_TIMEOUT: 300
@@ -107,6 +107,8 @@ services:
 #      DATABASE_RO_URL: mysql://socnet_ro:socnetpass@db_slave_1:3306/socnet
       DATABASE_URL: mysql://socnet:socnetpass@db_balancer:3306/socnet
       DATABASE_RO_URL: mysql://socnet_ro:socnetpass@db_balancer:3307/socnet
+
+      REDIS_URL: redis://redis:6379
     ports:
       - 127.0.0.1:8080:8080
     command: ash -c "/wait && python server.py"
@@ -114,12 +116,11 @@ services:
       - ./:/app
     depends_on:
       - db_balancer
-      - cache
-      - rabbit
+      - redis
 
   worker:
     image: *app
-    command: ash -c "/wait && python worker.py"
+    command: ash -c "/wait && arq worker.WorkerSettings"
     environment:
       WAIT_HOSTS: db:3306, db_balancer:3306, db_balancer:3307
       WAIT_HOSTS_TIMEOUT: 300
@@ -129,28 +130,16 @@ services:
       DATABASE_URL: mysql://socnet:socnetpass@db_balancer:3306/socnet
       DATABASE_RO_URL: mysql://socnet_ro:socnetpass@db_balancer:3307/socnet
 
+      REDIS_URL: redis://redis:6379
     volumes:
       - ./:/app
     depends_on:
       - db_balancer
-      - cache
-      - rabbit
+      - redis
 
-  rabbit:
-    image: rabbitmq:3-management-alpine
-    hostname: rabbit
-    ports:
-      - 5672:5672
-      - 127.0.0.1:15672:15672
-    environment:
-      RABBITMQ_DEFAULT_USER: user
-      RABBITMQ_DEFAULT_PASS: password
-      RABBITMQ_DEFAULT_VHOST: vhost
-    volumes:
-      - ./.data_rabbit:/var/lib/rabbitmq
 
   wrk:
     image: williamyeh/wrk:latest
-#    depends_on:
-#      - app
+    depends_on:
+      - app
 
