@@ -21,6 +21,7 @@ def default(o):
 # NEWS_CACHE_SIZE = 1000
 NEWS_CACHE_SIZE = 3
 NEWS_CACHE_TTL = 300
+NEWS_CACHE_SUBSCRIBERS_LIMIT = 20
 
 
 async def build_news_cache(ctx, user_id, force=False):
@@ -34,7 +35,7 @@ async def build_news_cache(ctx, user_id, force=False):
     async with pool.acquire() as conn:
         posts = await Post.filter(
             conn=conn, filter=dict(post_of_friends=user_id),
-            fields=['author__name', 'id', 'author_id', 'text', 'created_at', 'updated_at'], limit=3)
+            fields=['author__name', 'id', 'author_id', 'text', 'created_at', 'updated_at'], limit=NEWS_CACHE_SIZE)
         pipe = redis.pipeline()
 
         pipe.delete(key)
@@ -61,22 +62,25 @@ async def add_post_to_cache(ctx, post_id):
         for subscriber in await Friend.filter(
                 conn=conn,
                 filter=dict(friend_id=post['author_id']),
-                fields=['user_id'], limit=20):
+                fields=['user_id'], limit=NEWS_CACHE_SUBSCRIBERS_LIMIT):
             pipe = redis.pipeline()
             key = f'news:{subscriber["user_id"]}'
-            pipe.lpush(key, post_json)
+            if await redis.llen(key):
+                pipe.lpush(key, post_json)
 
-            pipe.ltrim(key, 0, NEWS_CACHE_SIZE - 1)
-            pipe.expire(key, NEWS_CACHE_TTL)
-            await pipe.execute()
+                pipe.ltrim(key, 0, NEWS_CACHE_SIZE - 1)
+                pipe.expire(key, NEWS_CACHE_TTL)
+                await pipe.execute()
+            else:
+                await build_news_cache(ctx, subscriber["user_id"])
     return 'add_post_to_cache done'
 
 
 async def startup(ctx):
     logging.basicConfig(level=logging.DEBUG)
-    databse_url = os.getenv('CLEARDB_DATABASE_URL', None) or os.getenv('DATABASE_URL', None)
+    database_url = os.getenv('CLEARDB_DATABASE_URL', None) or os.getenv('DATABASE_URL', None)
     pool = await aiomysql.create_pool(
-        **extract_database_credentials(databse_url),
+        **extract_database_credentials(database_url),
         maxsize=50,
         autocommit=True)
     ctx['db_pool'] = pool
@@ -114,8 +118,8 @@ class WorkerSettings:
 async def main():
     redis_url = os.getenv('REDIS_URL', None)
     arq_pool = await arq.create_pool(arq.connections.RedisSettings.from_dsn(redis_url))
-    user_id = 1001004
-    await arq_pool.enqueue_job('build_cache', user_id)
+    user_id = os.getenv('USER_ID', 1001004)
+    await arq_pool.enqueue_job('build_news_cache', user_id)
     arq_pool.close()
 
 
