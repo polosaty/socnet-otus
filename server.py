@@ -11,6 +11,7 @@ import aiohttp_session
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
 import aiomysql
 import arq
+import asynctnt
 from cryptography import fernet
 import jinja2
 
@@ -84,6 +85,14 @@ def extract_database_credentials(database_url) -> Dict[str, Any]:
     }
 
 
+def extract_tarantool_credentials(tar_url) -> Dict[str, Any]:
+    parsed_url = urlparse(tar_url)
+    return {
+        "host": parsed_url.hostname,
+        "port": parsed_url.port or 3301,
+    }
+
+
 async def make_app():
     app = web.Application()
 
@@ -113,11 +122,13 @@ async def make_app():
     )
 
     # secret_key must be 32 url-safe base64-encoded bytes
-    fernet_key = fernet.Fernet.generate_key()
+    fernet_key = os.getenv('FERNET_KEY', None)
+    if not fernet_key:
+        fernet_key = fernet.Fernet.generate_key()
     secret_key = base64.urlsafe_b64decode(fernet_key)
     aiohttp_session.setup(app, EncryptedCookieStorage(secret_key))
     logging.debug('fernet_key: %r secret_key: %r', fernet_key, secret_key)
-    # aiohttp_session.setup(app, aiohttp_session.SimpleCookieStorage())
+
     app.middlewares.append(check_login)
 
     aiohttp_jinja2.setup(
@@ -126,10 +137,10 @@ async def make_app():
         context_processors=[username_ctx_processor],
     )
 
-    databse_url = os.getenv('CLEARDB_DATABASE_URL', None) or os.getenv('DATABASE_URL', None)
+    database_url = os.getenv('CLEARDB_DATABASE_URL', None) or os.getenv('DATABASE_URL', None)
 
     pool = await aiomysql.create_pool(
-        **extract_database_credentials(databse_url),
+        **extract_database_credentials(database_url),
         maxsize=50,
         autocommit=True)
     app['db_pool'] = pool
@@ -157,6 +168,14 @@ async def make_app():
             await _app['arq_pool'].wait_closed()
 
         app.on_shutdown.append(close_arq_pool)
+
+    tarantool_url = os.getenv('TARANTOOL_URL', None)
+    if tarantool_url:
+
+        app['tnt'] = asynctnt.Connection(**extract_tarantool_credentials(tarantool_url))
+        await app['tnt'].connect()
+        # await app['tnt'].eval('''loadfile('script.lua')()''')
+        app.on_shutdown.append(app['tnt'].disconnect)
 
     await migrate_schema(pool)
 

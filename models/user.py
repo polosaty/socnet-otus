@@ -169,7 +169,7 @@ class User(Model):
                               f"{is_friend_subquery}"
                               f" FROM {cls._table_name} "
                               f" {where_sql} "
-                              f" ORDER BY firstname, id "
+                              f" ORDER BY lastname, firstname, id "
                               f"LIMIT %(limit)s OFFSET %(offset)s",
                               query_params)
             result = await cur.fetchall()

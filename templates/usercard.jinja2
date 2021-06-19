@@ -18,9 +18,12 @@
     </div>
     {% endif %}
 
+    {% if user.city %}
     <div class="city">
         Город: {{ user.city or '' }}
     </div>
+    {% endif %}
+
     {% if user.interest %}
     <div class="interest">
         Интересы: {{ user.interest or '' }}

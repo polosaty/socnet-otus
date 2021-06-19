@@ -1,3 +1,5 @@
+import logging
+
 from aiohttp import web
 import aiohttp_jinja2
 import aiohttp_session
@@ -23,14 +25,42 @@ async def hanlde_userlist(request: web.Request):
             'lastname': {'op': 'like', 'v': f"{search}%"}
         }
     users = []
-    # pool: aiomysql.pool.Pool = request.app['db_pool']
-    pool: aiomysql.pool.Pool = request.app['db_ro_pool']
-    async with pool.acquire() as conn:
-        users = await User.filter(
-            filter=filter,
-            fields=['id', 'firstname', 'lastname'],
-            limit=PAGE_SIZE + 1, offset=offset, conn=conn,
-            current_user_id=session['uid']) or []
+
+    if search and request.app.get('tnt'):
+        tnt = request.app['tnt']
+        res = await tnt.call(
+            'search_with_friend_and_subscriber', [search, session['uid'], PAGE_SIZE + 1, offset])
+        if res and res[0]:
+            for row in res[0]:
+                user_tuple = row[0]
+                is_subscriber, is_friend = row[1]
+                users.append(
+                    {
+                        'id': user_tuple[0],
+                        'username': user_tuple[1],
+                        'password': user_tuple[2],
+                        'firstname': user_tuple[3],
+                        'lastname': user_tuple[4],
+                        'city': user_tuple[5],
+                        'sex': user_tuple[6],
+                        'interest': user_tuple[7],
+                        'is_subscriber': is_subscriber,
+                        'is_friend': is_friend,
+                    }
+                )
+            logging.debug('users from tarantool: %r', len(users))
+
+    else:
+        pool: aiomysql.pool.Pool = request.app['db_ro_pool']
+        async with pool.acquire() as conn:
+            users = await User.filter(
+                filter=filter,
+                # fields=['id', 'firstname', 'lastname'],
+                fields=['id', 'username', 'password', 'firstname', 'lastname', 'city', 'sex', 'interest'],
+                limit=PAGE_SIZE + 1, offset=offset, conn=conn,
+                current_user_id=session['uid']) or []
+
+            logging.debug('users from mysql: %r', len(users))
 
     return dict(users=users[:PAGE_SIZE],
                 offset=offset,

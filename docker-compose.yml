@@ -20,15 +20,42 @@ services:
       MYSQL_DATABASE: socnet
       MYSQL_USER: socnet
       MYSQL_PASSWORD: socnetpass
+      LANG: C.UTF-8
+
     ports:
       # to connect from localhost
       - 127.0.0.1:3306:3306
     volumes:
-      - ./.data:/var/lib/mysql
+      - ./.data_db:/var/lib/mysql
       - ./docker/db/master.cnf:/etc/mysql/mysql.conf.d/mysqld.cnf
       # - ./.logs/mysql:/var/log/mysql
     mem_limit: 6000M
 
+  tarantool:
+    mem_limit: 3000M
+    image: tarantool/tarantool:1.10.10
+    command: tarantool /opt/tarantool/script.lua
+    environment:
+      LANG: C.UTF-8
+      TARANTOOL_MEMTX_MEMORY: 3145728000
+    #   TARANTOOL_FORCE_RECOVERY: 'true'
+    #   TARANTOOL_USER_NAME: myusername
+    #   TARANTOOL_USER_PASSWORD: mysecretpassword
+    ports:
+      - "3301:3301"
+    volumes:
+      - ./.data_tarantool:/var/lib/tarantool
+      - ./docker/tarantool/script.lua:/opt/tarantool/script.lua
+
+  replicatord:
+    user: 1000:1000
+    image: polosaty/mysql-tarantool-replication:ubuntu-18.04
+    command: ./replicatord -c ./replicatord.yml -l /dev/stderr
+    volumes:
+      - ./docker/tarantool/replicatord.yml:/replicatord.yml
+    # depends_on:
+    #   - db
+    #   - tarantool
 
   redis:
     image: redis:6.2.3-alpine
@@ -42,6 +69,7 @@ services:
       MYSQL_DATABASE: socnet
       MYSQL_USER: socnet
       MYSQL_PASSWORD: socnetpass
+      LANG: C.UTF-8
     ports:
       # to connect from localhost
       - 127.0.0.1:3307:3306
@@ -60,6 +88,7 @@ services:
       MYSQL_DATABASE: socnet
       MYSQL_USER: socnet
       MYSQL_PASSWORD: socnetpass
+      LANG: C.UTF-8
     ports:
       # to connect from localhost
       - 127.0.0.1:3308:3306
@@ -102,11 +131,14 @@ services:
       WAIT_HOSTS_TIMEOUT: 300
       WAIT_SLEEP_INTERVAL: 30
       WAIT_HOST_CONNECT_TIMEOUT: 30
+      FERNET_KEY: 'sIv6jBFwPkNSZP4gVUmzQUnsaMs7g1g7UMRStf5RpCM='
 
 #      DATABASE_URL: mysql://socnet:socnetpass@db:3306/socnet
 #      DATABASE_RO_URL: mysql://socnet_ro:socnetpass@db_slave_1:3306/socnet
       DATABASE_URL: mysql://socnet:socnetpass@db_balancer:3306/socnet
       DATABASE_RO_URL: mysql://socnet_ro:socnetpass@db_balancer:3307/socnet
+
+      TARANTOOL_URL: tarantool://tarantool:3301
 
       REDIS_URL: redis://redis:6379
     ports:
@@ -117,6 +149,8 @@ services:
     depends_on:
       - db_balancer
       - redis
+      - tarantool
+      - replicatord
 
   worker:
     image: *app
@@ -143,3 +177,14 @@ services:
     depends_on:
       - app
 
+
+  nb:
+    image: app-nb
+    ports:
+      - 127.0.0.1:8899:8899
+    build:
+      context: ./
+      dockerfile: ./docker/ipython.Dockerfile
+    command: ipython notebook --ip=0.0.0.0 --port=8899 --notebook-dir=./.data_nb/
+    volumes:
+      - ./.data_nb:/app/.data_nb:rw
