@@ -27,6 +27,7 @@ from news import hanlde_newspage
 from userlist import hanlde_add_friend
 from userlist import hanlde_del_friend
 from userlist import hanlde_userlist
+from userpage import handle_chat
 from userpage import handle_userpage
 
 STATIC_DIR = 'static'
@@ -109,6 +110,7 @@ async def make_app():
             web.post("/register/", handle_register),
 
             web.get("/userpage/", handle_userpage, name='user_page'),
+            web.post("/chat/", handle_chat, name='chat_page'),
             web.get("/userpage/{uid}/", handle_userpage),
             web.get("/userlist/", hanlde_userlist),
             web.post("/add_friend/{uid}/", hanlde_add_friend),
@@ -122,9 +124,7 @@ async def make_app():
     )
 
     # secret_key must be 32 url-safe base64-encoded bytes
-    fernet_key = os.getenv('FERNET_KEY', None)
-    if not fernet_key:
-        fernet_key = fernet.Fernet.generate_key()
+    fernet_key = os.getenv('FERNET_KEY', fernet.Fernet.generate_key())
     secret_key = base64.urlsafe_b64decode(fernet_key)
     aiohttp_session.setup(app, EncryptedCookieStorage(secret_key))
     logging.debug('fernet_key: %r secret_key: %r', fernet_key, secret_key)
@@ -183,7 +183,7 @@ async def make_app():
 
 
 def main():
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=os.getenv('LOG_LEVEL', logging.DEBUG))
     web.run_app(make_app(), port=int(os.getenv('PORT', 8080)))
 
 

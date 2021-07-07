@@ -1,0 +1,85 @@
+version: '2'
+
+services:
+
+  db:
+    image: mysql:5.7.33
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: socnet
+      MYSQL_USER: socnet
+      MYSQL_PASSWORD: socnetpass
+      LANG: C.UTF-8
+
+    ports:
+      # to connect from localhost
+      - 127.0.0.1:3306:3306
+    volumes:
+      - ./.data_db:/var/lib/mysql
+      - ./docker/db/master.cnf:/etc/mysql/mysql.conf.d/mysqld.cnf
+      # - ./.logs/mysql:/var/log/mysql
+    mem_limit: 6000M
+
+  redis:
+    image: redis:6.2.3-alpine
+    volumes:
+      - ./.data_redis:/data
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8081:8080
+
+  app:
+    tty: true
+    mem_limit: 1500M
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    image: &app socnet-app
+    environment:
+      WAIT_HOSTS: db:3306
+#      WAIT_HOSTS: db:3306, db_balancer:3306, db_balancer:3307
+      WAIT_HOSTS_TIMEOUT: 300
+      WAIT_SLEEP_INTERVAL: 30
+      WAIT_HOST_CONNECT_TIMEOUT: 30
+      FERNET_KEY: 'sIv6jBFwPkNSZP4gVUmzQUnsaMs7g1g7UMRStf5RpCM='
+
+      DATABASE_URL: mysql://socnet:socnetpass@db:3306/socnet
+#      DATABASE_RO_URL: mysql://socnet_ro:socnetpass@db_slave_1:3306/socnet
+#      DATABASE_URL: mysql://socnet:socnetpass@db_balancer:3306/socnet
+#      DATABASE_RO_URL: mysql://socnet_ro:socnetpass@db_balancer:3307/socnet
+#      TARANTOOL_URL: tarantool://tarantool:3301
+
+      REDIS_URL: redis://redis:6379
+
+      CHAT_URL: http://127.0.0.1:3000/
+    ports:
+      - 127.0.0.1:8080:8080
+    command: ash -c "/wait && python server.py"
+    volumes:
+      - ./:/app
+    depends_on:
+      - db
+      - redis
+
+  backend:
+    extends:
+      file: ../chat/docker-compose.yml
+      service: backend
+
+  frontend:
+    extends:
+      file: ../chat/docker-compose.yml
+      service: frontend
+
+  db_shard_1:
+    extends:
+      file: ../chat/docker-compose.yml
+      service: db_shard_1
+
+  db_shard_2:
+    extends:
+      file: ../chat/docker-compose.yml
+      service: db_shard_2

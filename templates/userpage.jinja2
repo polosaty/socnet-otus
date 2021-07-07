@@ -19,8 +19,12 @@
         {% set link = True %}
         {% include "usercard.jinja2" %}
         {% if uid == current_user.id %}
+            <div style="display: block; margin-bottom: 10px;">
             {% include "del_friend.jinja2" %}
+            {% include "chat_button.jinja2" %}
+            </div>
         {% endif %}
+{#        {% include "chat.jinja2" %}#}
         {% endfor %}
         </div>
     {% endif %}
