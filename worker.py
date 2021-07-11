@@ -4,6 +4,7 @@ import json
 import logging
 import os
 
+import aio_pika
 import aiomysql
 import arq
 
@@ -11,12 +12,7 @@ from models.friend import Friend
 from models.post import Post
 from server import close_db_pool
 from server import extract_database_credentials
-
-
-def default(o):
-    if isinstance(o, (datetime.date, datetime.datetime)):
-        return o.isoformat()
-
+from utils import default
 
 # NEWS_CACHE_SIZE = 1000
 NEWS_CACHE_SIZE = 3
@@ -50,6 +46,23 @@ async def build_news_cache(ctx, user_id, force=False):
     return 'build_cache done'
 
 
+async def send_post_to_subscriber(ctx, post, subscriber_id):
+    logging.debug('send_post_to_subscriber %r %r', post, subscriber_id)
+    rabbit: aio_pika.Connection = ctx.get('rabbit')
+    redis: arq.ArqRedis = ctx['arq_pool']
+    if not rabbit:
+        return
+
+    for instance_id in await redis.smembers(f'news:{subscriber_id}:instances'):
+        channel = await rabbit.channel()
+        exchange = await channel.get_exchange('news')
+        msg: aio_pika.Message = aio_pika.Message(
+            body=json.dumps(dict(post, subscriber_id=subscriber_id), default=default).encode(),
+            content_type='application/json')
+        await exchange.publish(msg, routing_key=instance_id)
+        logging.debug('publish post %r to ex: %r with routing_key: %r', post, exchange, instance_id)
+
+
 async def add_post_to_cache(ctx, post_id):
     logging.debug(f'add_post_to_cache post_id={post_id}...')
     pool: aiomysql.pool.Pool = ctx['db_pool']
@@ -73,6 +86,8 @@ async def add_post_to_cache(ctx, post_id):
                 await pipe.execute()
             else:
                 await build_news_cache(ctx, subscriber["user_id"])
+
+            await send_post_to_subscriber(ctx, post, subscriber_id=subscriber["user_id"])
     return 'add_post_to_cache done'
 
 
@@ -101,11 +116,23 @@ async def startup(ctx):
     if redis_url:
         ctx['arq_pool'] = await arq.create_pool(arq.connections.RedisSettings.from_dsn(redis_url))
 
+    rabbit_url = os.getenv('CLOUDAMQP_URL', os.getenv('RABBIT_URL', None))
+    if rabbit_url:
+        connection: aio_pika.Connection = await aio_pika.connect_robust(rabbit_url)
+        ctx['rabbit'] = connection
+        # async with connection:  closes connection
+        channel = await connection.channel()
+        await channel.declare_exchange("news", durable=True)
+
 
 async def shutdown(ctx):
+
     if ctx['db_pool'] == ctx['db_ro_pool']:
         await close_db_pool(ctx['db_ro_pool'])
     await close_db_pool(ctx['db_pool'])
+
+    if ctx.get('rabbit'):
+        await ctx['rabbit'].close()
 
 
 class WorkerSettings:
@@ -124,5 +151,5 @@ async def main():
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=os.getenv('LOG_LEVEL', logging.DEBUG))
     asyncio.run(main())

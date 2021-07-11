@@ -26,7 +26,7 @@ ADD ./requirements.txt /tmp/
 
 RUN apk add --virtual .build-deps --no-cache --update \
     cmake make musl-dev gcc g++ gettext-dev libintl git \
-    python3-dev libffi-dev openssl-dev cargo && \
+    python3-dev libffi-dev openssl-dev cargo zeromq-dev && \
     git clone https://github.com/rilian-la-te/musl-locales.git && \
     cd musl-locales && cmake . && make && make install && \
     rm -rf musl-locales && \

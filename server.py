@@ -1,9 +1,12 @@
+import asyncio
 import base64
+from collections import defaultdict
 import logging
 import os
 from typing import Any, Dict
 from urllib.parse import urlparse
 
+import aio_pika
 import aiofiles
 from aiohttp import web
 import aiohttp_jinja2
@@ -22,8 +25,10 @@ from login import handle_login_post
 from login import handle_logout_post
 from login import handle_register
 from login import username_ctx_processor
+from news import handle_news_ws
 from news import hanlde_add_post
 from news import hanlde_newspage
+from news import listen_news_updates
 from userlist import hanlde_add_friend
 from userlist import hanlde_del_friend
 from userlist import hanlde_userlist
@@ -96,6 +101,8 @@ def extract_tarantool_credentials(tar_url) -> Dict[str, Any]:
 
 async def make_app():
     app = web.Application()
+    app['instance_id'] = os.getenv('INSTANCE_ID', '1')
+    app['tasks'] = []
 
     app.add_routes(
         [
@@ -105,7 +112,6 @@ async def make_app():
             web.get("/login/", handle_login_get, name='login'),
             web.post("/login/", handle_login_post),
             web.get("/logout/", handle_logout_post),
-            # web.get("/register/", handle_html('register.jinja2')),
             web.get("/register/", handle_register),
             web.post("/register/", handle_register),
 
@@ -118,6 +124,7 @@ async def make_app():
 
             web.get("/newspage/", hanlde_newspage, name='news_page'),
             web.post("/add_post/", hanlde_add_post),
+            web.view("/news_ws/", handle_news_ws),
 
             web.get('/api/user/', api_user.handle_user),
         ]
@@ -143,6 +150,7 @@ async def make_app():
         **extract_database_credentials(database_url),
         maxsize=50,
         autocommit=True)
+
     app['db_pool'] = pool
     app.on_shutdown.append(lambda _app: close_db_pool(_app['db_pool']))
 
@@ -174,12 +182,32 @@ async def make_app():
 
         app['tnt'] = asynctnt.Connection(**extract_tarantool_credentials(tarantool_url))
         await app['tnt'].connect()
-        # await app['tnt'].eval('''loadfile('script.lua')()''')
         app.on_shutdown.append(app['tnt'].disconnect)
 
+    rabbit_url = os.getenv('CLOUDAMQP_URL', os.getenv('RABBIT_URL', None))
+    if rabbit_url:
+        connection: aio_pika.Connection = await aio_pika.connect_robust(rabbit_url)
+        app['rabbit'] = connection  # await connection.channel()
+        await start_background_task(app, listen_news_updates(app))
+
+    app['news_subscribers'] = defaultdict(dict)
+
+    app.on_shutdown.append(stop_tasks)
     await migrate_schema(pool)
 
     return app
+
+
+async def start_background_task(app, coro):
+    app['tasks'].append(asyncio.create_task(coro))
+
+
+async def stop_tasks(app):
+    t: asyncio.Task
+    for t in app['tasks']:
+        t.cancel()
+
+    await asyncio.gather(*app['tasks'])
 
 
 def main():

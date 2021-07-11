@@ -133,3 +133,7 @@ span.psw {
     padding: 2pt 2pt 2pt 2pt;
     /*width: 400pt;*/
 }
+
+.post > .created_at {
+  font-size: x-small;
+}

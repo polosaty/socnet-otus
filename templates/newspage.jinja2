@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="/static/style.css" type="text/css">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="/static/style.css" type="text/css">
+    <script type="text/javascript" src="https://code.jquery.com/jquery-3.6.0.min.js" ></script>
 </head>
 <script>
     function nextPage(offset) {
@@ -14,6 +15,8 @@
 
 {% include "links.jinja2" %}
 
+
+
 {% if posts %}
 
     {% if offset and offset > 0 %}
@@ -23,6 +26,90 @@
         <button onclick="nextPage({{ offset + limit }})" style="width:auto;">&gt;</button>
     {% endif %}
 
+{% endif %}
+
+{% if not offset %}
+    <div id="new_posts" ></div>
+    <script>
+
+function initWs(){
+    let loc = window.location, ws_uri;
+    let interval;
+    if (loc.protocol === "https:") {
+        ws_uri = "wss:";
+    } else {
+        ws_uri = "ws:";
+    }
+    ws_uri += "//" + loc.host;
+    ws_uri += (({{ ws_url | default('null') }}) || '/news_ws/');
+
+    let ws = new WebSocket(ws_uri, 'jsonp')
+    ws.onopen = function() {
+        console.log("Connection opened...");
+        if (interval) {
+            clearInterval(interval);
+            interval = null;
+        }
+        interval = setInterval(
+            () => {
+                ws.send(JSON.stringify({type: 'ping'}))
+            }, 5000);
+
+    };
+    ws.onclose = function() {
+        console.log("Connection closed...");
+        if (interval) {
+            clearInterval(interval);
+            interval = null;
+        }
+        setTimeout(() => {
+                initWs();
+            },
+            2000);
+    };
+    ws.onmessage = function(evt) {
+        console.log(
+            'ws>' + (evt.data)
+        );
+        let msg = JSON.parse(evt.data);
+        if (msg.type === 'posts') {
+            msg.data.map((post) => {
+                if ($(`#post-${post.id}`).length > 0){
+                    console.log(`skip post ${post.id}`)
+                    return;
+                }
+                const post_html = `
+                <div class="post" id="post-${post.id}">
+
+                    <div class="text">
+                        <p>${post.text}</p>
+                    </div>
+                    <div class="created_at">` + (
+                    post.author__name && post.author_id ? (
+                        `<a href="/userpage/${post.author_id}/">${post.author__name}</a> ${post.created_at}`
+                    ) : (`<p>${post.created_at}</p>`)
+                ) + `</div>` + (
+                    post.updated_at ? (
+                        `<div class="updated_at"><p>${post.updated_at}</p></div>`
+                    ) : ''
+                ) + `</div><hr />`;
+
+
+                $(post_html).prependTo("#new_posts");
+
+
+            })
+
+        }
+    };
+}
+
+initWs();
+
+</script>
+{% endif %}
+
+{% if posts %}
     {%- for post in posts %}
         {% include "post.jinja2" %}
         {%- if not loop.last %}
