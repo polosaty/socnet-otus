@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from urllib.parse import parse_qsl
 from urllib.parse import urlencode
@@ -10,10 +11,13 @@ import aiohttp_jinja2
 import aiohttp_session
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
 import aiomysql
+import aiozipkin as az
 
 from login import require_login
 from models.post import Post
 from models.user import User
+
+logger = logging.getLogger(__name__)
 
 
 @require_login
@@ -73,70 +77,41 @@ def update_url(url, params):
     return new_url
 
 
+async def chat_api_get_key(session, user_id, friend_id):
+    chat_rest_url = os.getenv('CHAT_REST_URL') + 'make_chat/'
+    if not chat_rest_url:
+        return None
+
+    # async with aiohttp.ClientSession() as session:
+    resp = await session.post(chat_rest_url,
+                              json={'user_id': user_id,
+                                    'friend_id': friend_id})
+    logger.debug('Chat rest response: %r', resp.status)
+    res = await resp.json()
+    return res.get('chat_key')
+
+
 @require_login
 @aiohttp_jinja2.template('chat.jinja2')
 async def handle_chat(request: web.Request):
     chat_url = os.getenv('CHAT_URL')
     if not chat_url:
         raise web.HTTPBadRequest(reason='CHAT_URL env not set')
-        # location = request.headers.get('Referer', '/userlist/')
-        # raise web.HTTPFound(location=location)
 
     session = await aiohttp_session.get_session(request)
     uid = session["uid"]
 
     form = await request.post()
     friend_id = form.get('user_id')
-
-    pool: aiomysql.pool.Pool = request.app['db_pool']
-    conn: aiomysql.Connection
-    async with pool.acquire() as conn:
-        cur: aiomysql.cursors.DictCursor
-        async with conn.cursor(aiomysql.DictCursor) as cur:
-            await cur.execute(
-                'SELECT chat_id FROM chat_user cu WHERE user_id = %(friend_id)s '
-                ' AND EXISTS(select 1 from chat_user WHERE user_id = %(uid)s '
-                ' AND chat_id = cu.chat_id) '
-                ' ORDER BY chat_id desc LIMIT 1',
-                dict(
-                    friend_id=friend_id,
-                    uid=uid
-                )
-            )
-            chat_row = await cur.fetchone()
-            if chat_row:
-                chat_id = chat_row['chat_id']
-            else:
-                # smallest_shard_id get by max(chat_message.id) from shards
-                await cur.execute("select id from shard order by size limit 1")
-                smallest_shard_id = (await cur.fetchone())['id']
-
-                await conn.begin()
-                await cur.execute(
-                    "INSERT INTO chat (`type`, `key`) VALUES ('peer2peer', uuid()); "
-                )
-                chat_id = cur.lastrowid
-                await cur.execute(
-                    "INSERT INTO chat_user (user_id, chat_id) "
-                    " VALUES  (%(friend_id)s, %(chat_id)s), (%(uid)s, %(chat_id)s);",
-                    dict(
-                        friend_id=friend_id,
-                        uid=uid,
-                        chat_id=chat_id
-                    )
-                )
-                await cur.execute(
-                    "INSERT INTO chat_shard (chat_id, shard_id, `read`, `write`) "
-                    "VALUES  (%(chat_id)s, %(shard_id)s, 1, 1);",
-                    dict(
-                        shard_id=smallest_shard_id,
-                        chat_id=chat_id
-                    )
-                )
-                await conn.commit()
-
-            await cur.execute("SELECT `key` FROM chat WHERE id = %(chat_id)s", dict(chat_id=chat_id))
-            chat_key = (await cur.fetchone())['key']
+    client_session = request.app['client_session']
+    tracer = az.get_tracer(request.app)
+    span = az.request_span(request)
+    with tracer.new_child(span.context) as child_span:
+        child_span.name("chat_api_get_key")
+        child_span.tag('user_id', uid)
+        child_span.tag('friend_id', friend_id)
+        chat_key = await chat_api_get_key(client_session, user_id=uid, friend_id=friend_id)
+        child_span.tag('chat_key', chat_key)
 
     storage: EncryptedCookieStorage = request.get(aiohttp_session.STORAGE_KEY)
     chat_session = storage.load_cookie(request)

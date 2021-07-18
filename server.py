@@ -8,11 +8,14 @@ from urllib.parse import urlparse
 
 import aio_pika
 import aiofiles
+import aiohttp
 from aiohttp import web
 import aiohttp_jinja2
 import aiohttp_session
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
 import aiomysql
+# import aiojaeger as az
+import aiozipkin as az
 import arq
 import asynctnt
 from cryptography import fernet
@@ -63,6 +66,7 @@ async def handle_index(request):
 
 
 async def migrate_schema(pool):
+    logging.debug('migrate schema')
     conn: aiomysql.connection.Connection
     async with pool.acquire() as conn:
         cur: aiomysql.cursors.Cursor
@@ -70,10 +74,12 @@ async def migrate_schema(pool):
             try:
                 await cur.execute("SELECT * FROM post LIMIT 1")
                 await cur.fetchone()
+                logging.debug('migrate schema not needed')
             except Exception:
                 with open("schema.sql") as f:
                     schema = f.read()
                     await cur.execute(schema)
+                logging.debug('migrate schema finished')
 
 
 def extract_database_credentials(database_url) -> Dict[str, Any]:
@@ -99,10 +105,24 @@ def extract_tarantool_credentials(tar_url) -> Dict[str, Any]:
     }
 
 
-async def make_app():
+async def make_app(host, port):
     app = web.Application()
     app['instance_id'] = os.getenv('INSTANCE_ID', '1')
     app['tasks'] = []
+
+    # jaeger_address = 'udp://jaeger:6831'
+    # jaeger_address = 'http://jaeger:14268/api/traces'
+    jaeger_address = 'http://jaeger:9411/api/v2/spans'
+    endpoint = az.create_endpoint(f"social_net_server_{app['instance_id']}", ipv4=host, port=port)
+    tracer = await az.create(jaeger_address, endpoint, sample_rate=1.0)
+
+    trace_config = az.make_trace_config(tracer)
+    app['client_session'] = aiohttp.ClientSession(trace_configs=[trace_config])
+
+    async def close_session(app):
+        await app["client_session"].close()
+
+    app.on_cleanup.append(close_session)
 
     app.add_routes(
         [
@@ -193,8 +213,10 @@ async def make_app():
     app['news_subscribers'] = defaultdict(dict)
 
     app.on_shutdown.append(stop_tasks)
-    await migrate_schema(pool)
 
+    az.setup(app, tracer)
+
+    await migrate_schema(pool)
     return app
 
 
@@ -210,9 +232,25 @@ async def stop_tasks(app):
     await asyncio.gather(*app['tasks'])
 
 
+async def run_app(port, host='0.0.0.0'):
+    try:
+        app = await make_app()
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, host, port)
+        await site.start()
+    except asyncio.CancelledError as ex:
+        logging.exception('run_app: %r', ex)
+    except Exception as ex:
+        logging.exception('run_app: %r', ex)
+
+
 def main():
     logging.basicConfig(level=os.getenv('LOG_LEVEL', logging.DEBUG))
-    web.run_app(make_app(), port=int(os.getenv('PORT', 8080)))
+    port = int(os.getenv('PORT', 8080))
+    host = '0.0.0.0'
+    web.run_app(make_app(host, port), port=port)
+    # asyncio.run(run_app(port=int(os.getenv('PORT', 8080))))
 
 
 if __name__ == '__main__':

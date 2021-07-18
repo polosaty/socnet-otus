@@ -55,6 +55,9 @@ services:
       REDIS_URL: redis://redis:6379
 
       CHAT_URL: http://127.0.0.1:3000/
+      CHAT_REST_URL: http://backend:8081/
+
+      JAEGER_ADDRESS: http://jaeger:9411/api/v2/spans
     ports:
       - 127.0.0.1:8080:8080
     command: ash -c "/wait && python server.py"
@@ -68,11 +71,15 @@ services:
     extends:
       file: ../chat/docker-compose.yml
       service: backend
+    environment:
+      REST_PORT: 8081
+      JAEGER_ADDRESS: http://jaeger:9411/api/v2/spans
 
   frontend:
     extends:
       file: ../chat/docker-compose.yml
-      service: frontend
+#      service: frontend
+      service: frontend-dev
 
   db_shard_1:
     extends:
@@ -83,3 +90,19 @@ services:
     extends:
       file: ../chat/docker-compose.yml
       service: db_shard_2
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      COLLECTOR_ZIPKIN_HOST_PORT: ':9411'
+    ports:
+      - "6831:6831/udp"
+      - "16686:16686"
+      - "5775:5775/udp"
+
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "14268:14268"
+      - "14250:14250"
+      - "9411:9411"
+
