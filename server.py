@@ -110,14 +110,15 @@ async def make_app(host, port):
     app['instance_id'] = os.getenv('INSTANCE_ID', '1')
     app['tasks'] = []
 
-    # jaeger_address = 'udp://jaeger:6831'
-    # jaeger_address = 'http://jaeger:14268/api/traces'
-    jaeger_address = 'http://jaeger:9411/api/v2/spans'
-    endpoint = az.create_endpoint(f"social_net_server_{app['instance_id']}", ipv4=host, port=port)
-    tracer = await az.create(jaeger_address, endpoint, sample_rate=1.0)
+    jaeger_address = os.getenv('JAEGER_ADDRESS')
+    if jaeger_address:
+        endpoint = az.create_endpoint(f"social_net_server_{app['instance_id']}", ipv4=host, port=port)
+        tracer = await az.create(jaeger_address, endpoint, sample_rate=1.0)
 
-    trace_config = az.make_trace_config(tracer)
-    app['client_session'] = aiohttp.ClientSession(trace_configs=[trace_config])
+        trace_config = az.make_trace_config(tracer)
+        app['client_session'] = aiohttp.ClientSession(trace_configs=[trace_config])
+    else:
+        app['client_session'] = aiohttp.ClientSession()
 
     async def close_session(app):
         await app["client_session"].close()
@@ -214,7 +215,8 @@ async def make_app(host, port):
 
     app.on_shutdown.append(stop_tasks)
 
-    az.setup(app, tracer)
+    if jaeger_address:
+        az.setup(app, tracer)
 
     await migrate_schema(pool)
     return app

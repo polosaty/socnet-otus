@@ -1,0 +1,156 @@
+version: '2'
+
+services:
+
+  nginx:
+    image: nginx:1.21.1-alpine
+    ports:
+      - "81:80"
+    restart: always
+    volumes:
+      - "./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro"
+      - "./static:/usr/share/nginx/html/static"
+#      - "./.nginx_logs:/logs"
+    depends_on:
+     - app_1
+     - app_2
+
+  db:
+    image: mysql:5.7.33
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: socnet
+      MYSQL_USER: socnet
+      MYSQL_PASSWORD: socnetpass
+      LANG: C.UTF-8
+
+    ports:
+      # to connect from localhost
+      - 127.0.0.1:3306:3306
+    volumes:
+      - ./.data_db:/var/lib/mysql
+      - ./docker/db/master.cnf:/etc/mysql/mysql.conf.d/mysqld.cnf
+    mem_limit: 6000M
+
+  db_slave_1:
+    image: mysql:5.7.33
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: socnet
+      MYSQL_USER: socnet
+      MYSQL_PASSWORD: socnetpass
+      LANG: C.UTF-8
+    ports:
+      # to connect from localhost
+      - 127.0.0.1:3307:3306
+    volumes:
+      - ./.data_db_slave_1:/var/lib/mysql
+      - ./docker/db/slave_1.cnf:/etc/mysql/mysql.conf.d/mysqld.cnf
+      # - ./.logs/mysql:/var/log/mysql
+    depends_on:
+      - db
+    mem_limit: 6000M
+
+  db_slave_2:
+    image: mysql:5.7.33
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: socnet
+      MYSQL_USER: socnet
+      MYSQL_PASSWORD: socnetpass
+      LANG: C.UTF-8
+    ports:
+      # to connect from localhost
+      - 127.0.0.1:3308:3306
+    volumes:
+      - ./.data_db_slave_2:/var/lib/mysql
+      - ./docker/db/slave_2.cnf:/etc/mysql/mysql.conf.d/mysqld.cnf
+      # - ./.logs/mysql:/var/log/mysql
+    depends_on:
+      - db
+    mem_limit: 6000M
+
+  db_balancer:
+    image: haproxy:2.4.0-alpine
+    volumes:
+      - ./docker/haproxy_mysql.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - 127.0.0.1:8082:8080
+      - 3306
+      - 3307
+    depends_on:
+      - db
+      - db_slave_1
+      - db_slave_2
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8081:8080
+
+  app_1:
+    tty: true
+    mem_limit: 1500M
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    image: &app socnet-app
+    environment:
+      INSTANCE_ID: 1
+
+      WAIT_HOSTS: db:3306, db_balancer:3306, db_balancer:3307
+      WAIT_HOSTS_TIMEOUT: 300
+      WAIT_SLEEP_INTERVAL: 30
+      WAIT_HOST_CONNECT_TIMEOUT: 30
+      FERNET_KEY: 'sIv6jBFwPkNSZP4gVUmzQUnsaMs7g1g7UMRStf5RpCM='
+
+      DATABASE_URL: mysql://socnet:socnetpass@db_balancer:3306/socnet
+      DATABASE_RO_URL: mysql://socnet_ro:socnetpass@db_balancer:3307/socnet
+
+    ports:
+      - 127.0.0.1:8001:8080
+    command: ash -c "/wait && python server.py"
+    volumes:
+      - ./:/app
+    depends_on:
+      - db_balancer
+
+  app_2:
+    tty: true
+    mem_limit: 1500M
+    image: *app
+    environment:
+      INSTANCE_ID: 2
+
+      WAIT_HOSTS: db:3306, db_balancer:3306, db_balancer:3307
+      WAIT_HOSTS_TIMEOUT: 300
+      WAIT_SLEEP_INTERVAL: 30
+      WAIT_HOST_CONNECT_TIMEOUT: 30
+      FERNET_KEY: 'sIv6jBFwPkNSZP4gVUmzQUnsaMs7g1g7UMRStf5RpCM='
+
+      DATABASE_URL: mysql://socnet:socnetpass@db_balancer:3306/socnet
+      DATABASE_RO_URL: mysql://socnet_ro:socnetpass@db_balancer:3307/socnet
+
+    ports:
+      - 127.0.0.1:8002:8080
+    command: ash -c "/wait && python server.py"
+    volumes:
+      - ./:/app
+    depends_on:
+      - db_balancer
+
+  wrk:
+    image: williamyeh/wrk:latest
+
+
+  nb:
+    image: app-nb
+    ports:
+      - 127.0.0.1:8899:8899
+    build:
+      context: ./
+      dockerfile: ./docker/ipython.Dockerfile
+    command: ipython notebook --ip=0.0.0.0 --port=8899 --notebook-dir=./.data_nb/
+    volumes:
+      - ./.data_nb:/app/.data_nb:rw

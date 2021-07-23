@@ -1,5 +1,4 @@
 import asyncio
-from functools import partial
 import json
 import logging
 
@@ -13,7 +12,6 @@ import arq
 
 from login import require_login
 from models.post import Post
-from utils import default
 
 logger = logging.getLogger('news')
 
@@ -116,6 +114,7 @@ async def delete_subscriber(uid, sid, app):
             await redis.srem(subscriber_key, app['instance_id'])
         except Exception as ex:
             logger.exception('redis.srem %r', ex)
+
 
 async def listen_news_updates(app):
     rabbit: aio_pika.Connection = app.get('rabbit')
