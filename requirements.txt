@@ -10,4 +10,4 @@ aio-pika==6.8.0
 asynctnt==1.2.1
 notebook
 aiozipkin==1.1.0
-#git+git@github.com:Pavkazzz/aiojaeger.git@master#egg=package-two
+#git+git@github.com:Pavkazzz/aiojaeger.git@master#egg=aiojaeger

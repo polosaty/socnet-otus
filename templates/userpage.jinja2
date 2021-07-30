@@ -1,7 +1,9 @@
 <html>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="/static/style.css" type="text/css">
-
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="/static/style.css" type="text/css">
+    <script type="text/javascript" src="https://code.jquery.com/jquery-3.6.0.min.js" ></script>
+</head>
 {% include "links.jinja2" %}
 <document>
     <h2>Данные пользователя:</h2>
@@ -64,6 +66,25 @@
             <button type="submit" style="width: auto">Post</button>
         </form>
     </div>
+
+    {% if counters_url %}
+    <script>
+         $( document ).ready(function(){
+
+             const refresh_uread = () => $.getJSON('{{ counters_url|safe }}', (data) => {
+                     console.log(data)
+                     for(let user_id in data){
+                         let val = data[user_id];
+                         $(`#bage-unread-${user_id}`).text(val === 0 ? '' : val)
+                     }
+                 })
+             refresh_uread()
+             window.set_unread = setInterval(refresh_uread, 5000)
+
+         })
+    </script>
+    {% endif %}
+
 {% endif %}
 
 

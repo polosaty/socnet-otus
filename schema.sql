@@ -4,21 +4,21 @@ SET foreign_key_checks = 0;
 SET sql_mode = 'NO_AUTO_VALUE_ON_ZERO';
 
 -- DROP DATABASE IF EXISTS `socnet`;
--- CREATE DATABASE IF NOT EXISTS `socnet` /*!40100 DEFAULT CHARACTER SET utf8 COLLATE utf8_bin */;
+-- CREATE DATABASE IF NOT EXISTS `socnet` /*!40100 DEFAULT CHARACTER SET utf8 COLLATE utf8_unicode_ci */;
 -- USE `socnet`;
 -- DROP TABLE IF EXISTS `user`;
 CREATE TABLE IF NOT EXISTS `user` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `username` varchar(255) COLLATE utf8_bin NOT NULL,
-  `password` varchar(255) COLLATE utf8_bin NOT NULL,
-  `firstname` varchar(255) COLLATE utf8_bin NOT NULL,
-  `lastname` varchar(255) COLLATE utf8_bin DEFAULT NULL,
-  `sex` enum('m','f') COLLATE utf8_bin DEFAULT NULL,
-  `city` varchar(255) COLLATE utf8_bin DEFAULT NULL,
-  `interest` text COLLATE utf8_bin,
+  `username` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
+  `password` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
+  `firstname` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
+  `lastname` varchar(255) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `sex` enum('m','f') COLLATE utf8_unicode_ci DEFAULT NULL,
+  `city` varchar(255) COLLATE utf8_unicode_ci DEFAULT NULL,
+  `interest` text COLLATE utf8_unicode_ci,
   PRIMARY KEY (`id`),
   UNIQUE KEY `username` (`username`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 CREATE INDEX /*IF NOT EXISTS*/ `user_lastname_firstname_id_index` ON `USER`(`lastname`, `firstname`, `id`);
 
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS `friend` (
   KEY `friend_id` (`friend_id`),
   CONSTRAINT `friend_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE,
   CONSTRAINT `friend_ibfk_2` FOREIGN KEY (`friend_id`) REFERENCES `user` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 -- 2021-04-07 15:05:13
 
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS `post` (
   `created_at` timestamp NOT NULL,
   `updated_at` timestamp NULL ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (`author_id`) REFERENCES `user` (`id`) ON DELETE CASCADE
-) ENGINE='InnoDB'  DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
+) ENGINE='InnoDB'  DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 
 SET NAMES utf8;

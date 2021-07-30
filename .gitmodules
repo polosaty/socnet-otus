@@ -1,0 +1,6 @@
+[submodule "socnet-otus-counters"]
+	path = services/counters
+	url = git@github.com:polosaty/socnet-otus-counters.git
+[submodule "socnet-otus-chat"]
+	path = services/chat
+	url = git@github.com:polosaty/socnet-otus-chat.git

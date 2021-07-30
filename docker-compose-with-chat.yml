@@ -57,6 +57,8 @@ services:
       CHAT_URL: http://127.0.0.1:3000/
       CHAT_REST_URL: http://backend:8081/
 
+      COUNTERS_URL: http://127.0.0.1:3001/
+
       JAEGER_ADDRESS: http://jaeger:9411/api/v2/spans
     ports:
       - 127.0.0.1:8080:8080
@@ -69,26 +71,27 @@ services:
 
   backend:
     extends:
-      file: ../chat/docker-compose.yml
+      file: ./services/chat/docker-compose.yml
       service: backend
     environment:
       REST_PORT: 8081
       JAEGER_ADDRESS: http://jaeger:9411/api/v2/spans
+      COUNTERS_REST_URL: http://counters:8081
 
   frontend:
     extends:
-      file: ../chat/docker-compose.yml
-#      service: frontend
+      file: ./services/chat/docker-compose.yml
+      # service: frontend
       service: frontend-dev
 
   db_shard_1:
     extends:
-      file: ../chat/docker-compose.yml
+      file: ./services/chat/docker-compose.yml
       service: db_shard_1
 
   db_shard_2:
     extends:
-      file: ../chat/docker-compose.yml
+      file: ./services/chat/docker-compose.yml
       service: db_shard_2
 
   jaeger:
@@ -97,7 +100,10 @@ services:
       COLLECTOR_ZIPKIN_HOST_PORT: ':9411'
     ports:
       - "6831:6831/udp"
+
+      # fronetned: 16686
       - "16686:16686"
+
       - "5775:5775/udp"
 
       - "6832:6832/udp"
@@ -106,3 +112,15 @@ services:
       - "14250:14250"
       - "9411:9411"
 
+  counters:
+    extends:
+      service: backend
+      file: ./services/counters/docker-compose.yml
+    environment:
+      INSTANCE: counters
+      DATABASE_URL: mysql://socnet:socnetpass@db:3306/socnet
+#      DATABASE_URL: mysql://socnet:socnetpass@db_balancer:3306/socnet
+#      DATABASE_RO_URL: mysql://socnet_ro:socnetpass@db_balancer:3307/socnet
+
+      JAEGER_ADDRESS: http://jaeger:9411/api/v2/spans
+      REST_PORT: 8081

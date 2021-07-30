@@ -236,7 +236,7 @@ async def stop_tasks(app):
 
 async def run_app(port, host='0.0.0.0'):
     try:
-        app = await make_app()
+        app = await make_app(port, host)
         runner = web.AppRunner(app)
         await runner.setup()
         site = web.TCPSite(runner, host, port)

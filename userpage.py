@@ -3,6 +3,7 @@ import logging
 import os
 from urllib.parse import parse_qsl
 from urllib.parse import urlencode
+from urllib.parse import urljoin
 from urllib.parse import urlparse
 from urllib.parse import urlunparse
 
@@ -61,9 +62,20 @@ async def handle_userpage(request: web.Request):
         get_subscribers(user=u),
         get_posts(user=u)
     )
+    counters_url = os.getenv('COUNTERS_URL')
+    new_counters_url = None
+    if counters_url:
+        storage: EncryptedCookieStorage = request.get(aiohttp_session.STORAGE_KEY)
+        user_session = storage.load_cookie(request)
+        new_counters_url = update_url(urljoin(counters_url, 'get_counters/'), dict(
+            userId=uid,
+            friends=','.join(map(lambda friend: str(friend['id']), friends)),
+            session=user_session
+        ))
     return dict(current_user=user, session=session, friends=friends,
                 subscribers=subscribers, posts=posts, uid=uid,
-                chat_url=os.getenv('CHAT_URL'))
+                chat_url=os.getenv('CHAT_URL'),
+                counters_url=new_counters_url)
 
 
 def update_url(url, params):
