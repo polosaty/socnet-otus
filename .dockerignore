@@ -1,7 +1,13 @@
-.data*
+**/.data*
+**/.git
+**/__pycache__
 docker
 .logs
 .idea
 .local
 .cache
 .env
+.ipython
+.jupyter
+services
+monitoring

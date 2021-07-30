@@ -33,7 +33,11 @@ async def check_login(request: web.Request,
         if not username:
             location = request.app.router['login'].url_for().with_query(dict(next=str(request.rel_url)))
             raise web.HTTPSeeOther(location=location)
-    return await handler(request)
+    if request.match_info.route.resource:
+        return await handler(request)
+    else:
+        # to prevent assertion error in aiozipkin on /favicon.ico
+        raise web.HTTPNotFound()
 
 
 async def validate_login(form, app):

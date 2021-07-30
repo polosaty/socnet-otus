@@ -137,3 +137,25 @@ span.psw {
 .post > .created_at {
   font-size: x-small;
 }
+
+
+.badge-unread:empty {
+  display: none;
+}
+
+.badge-unread {
+  display: inline-block;
+  background-color: #c4c9cc;
+  border-radius: .75rem;
+  font-weight: 500;
+  color: #fff;
+  font-size: .875rem;
+  text-align: center;
+
+  height: 1.5rem;
+  min-width: 1.5rem;
+  line-height: 1.5rem !important;
+  padding: 0 .5rem;
+
+  margin-left: -.5rem;
+}
