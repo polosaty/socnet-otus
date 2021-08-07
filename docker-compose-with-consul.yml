@@ -1,0 +1,178 @@
+version: '3'
+
+services:
+
+  db:
+    image: mysql:5.7.33
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: socnet
+      MYSQL_USER: socnet
+      MYSQL_PASSWORD: socnetpass
+      LANG: C.UTF-8
+
+    ports:
+      # to connect from localhost
+      - 127.0.0.1:3306:3306
+    volumes:
+      - ./.data_db:/var/lib/mysql
+      - ./docker/db/master.cnf:/etc/mysql/mysql.conf.d/mysqld.cnf
+    mem_limit: 6000M
+
+  redis:
+    image: redis:6.2.3-alpine
+    volumes:
+      - ./.data_redis:/data
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8081:8080
+
+  app:
+    tty: true
+    mem_limit: 1500M
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    image: &app socnet-app
+    environment:
+      WAIT_HOSTS: db:3306
+#      WAIT_HOSTS: db:3306, db_balancer:3306, db_balancer:3307
+      WAIT_HOSTS_TIMEOUT: 300
+      WAIT_SLEEP_INTERVAL: 30
+      WAIT_HOST_CONNECT_TIMEOUT: 30
+      FERNET_KEY: 'sIv6jBFwPkNSZP4gVUmzQUnsaMs7g1g7UMRStf5RpCM='
+
+      DATABASE_URL: mysql://socnet:socnetpass@db:3306/socnet
+
+      REDIS_URL: redis://redis:6379
+
+      # frontend
+      CHAT_URL: http://127.0.0.1:3000/
+#      CHAT_REST_URL: http://backend:8081/
+      CHAT_REST_URL: http://nginx:8081/
+
+      COUNTERS_URL: http://127.0.0.1:3001/
+
+      JAEGER_ADDRESS: http://jaeger:9411/api/v2/spans
+    ports:
+      - 127.0.0.1:8080:8080
+    command: ash -c "/wait && python server.py"
+    volumes:
+      - ./:/app
+    depends_on:
+      - db
+      - redis
+
+  chat_backend_1:
+    extends:
+      file: ./services/chat/docker-compose.yml
+      service: backend
+    deploy:
+      replicas: 2
+    environment:
+#      INSTANCE_ID: "{{.Task.Slot}}"
+      SERVICE_8080_NAME: chat_backend
+      SERVICE_8081_NAME: chat_backend_rest
+      JAEGER_ADDRESS: http://jaeger:9411/api/v2/spans
+      COUNTERS_REST_URL: http://counters:8081
+
+
+#  chat_backend_2:
+#    extends:
+#      file: ./services/chat/docker-compose.yml
+#      service: backend
+#    environment:
+#      INSTANCE_ID: 2
+#      SERVICE_8080_NAME: chat_backend
+#      SERVICE_8081_NAME: chat_backend_rest
+#      JAEGER_ADDRESS: http://jaeger:9411/api/v2/spans
+#      COUNTERS_REST_URL: http://counters:8081
+
+  chat_frontend:
+    extends:
+      file: ./services/chat/docker-compose.yml
+      service: frontend
+#      service: frontend-dev
+
+  db_shard_1:
+    extends:
+      file: ./services/chat/docker-compose.yml
+      service: db_shard_1
+    environment:
+      SERVICE_NAME: chat_db_shard
+
+  db_shard_2:
+    extends:
+      file: ./services/chat/docker-compose.yml
+      service: db_shard_2
+    environment:
+      SERVICE_NAME: chat_db_shard
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      SERVICE_NAME: jaeger
+      COLLECTOR_ZIPKIN_HOST_PORT: ':9411'
+    ports:
+      - "6831:6831/udp"
+
+      # fronetned: 16686
+      - "16686:16686"
+
+      - "5775:5775/udp"
+
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "14268:14268"
+      - "14250:14250"
+      - "9411:9411"
+
+  counters:
+    extends:
+      service: backend
+      file: ./services/counters/docker-compose.yml
+    environment:
+      INSTANCE: counters
+      DATABASE_URL: mysql://socnet:socnetpass@db:3306/socnet
+      JAEGER_ADDRESS: http://jaeger:9411/api/v2/spans
+      REST_PORT: 8081
+
+  consul:
+    image: consul:1.10.1
+    ports:
+      - 8500:8500
+
+  nginx:
+    image: social-net-nginx-consul-template
+    build:
+      context: ./docker/nginx
+      dockerfile: nginx-consult-template.Dockerfile
+    restart: unless-stopped
+    environment:
+      CONSUL_HOST: consul:8500
+    volumes:
+      - "./docker/nginx/nginx.conf:/etc/consul-templates/app.conf:ro"
+#      - "./docker/nginx/tmp/:/etc/nginx/conf.d/:rw"
+#      - "./static:/usr/share/nginx/html/static"
+#      - "./docker/nginx/ct.sh:/ct.sh:ro"
+#      - "./docker/nginx/ng.sh:/ng.sh:ro"
+#    command: /bin/codep /ct.sh /ng.sh
+    expose:
+      - 8080
+      - 8081
+    ports:
+      - 81:80
+      - 8088:8088
+
+  registrator:
+    image: gliderlabs/registrator:latest
+    container_name: registrator
+#    hostname: ${MYHOST}
+#    network_mode: host
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock
+    command: -internal consul://consul:8500
