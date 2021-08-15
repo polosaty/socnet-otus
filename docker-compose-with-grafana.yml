@@ -1,0 +1,248 @@
+version: '3'
+
+services:
+
+  db:
+    image: mysql:5.7.33
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: socnet
+      MYSQL_USER: socnet
+      MYSQL_PASSWORD: socnetpass
+      LANG: C.UTF-8
+
+    ports:
+      # to connect from localhost
+      - 127.0.0.1:3306:3306
+    volumes:
+      - ./.data_db:/var/lib/mysql
+      - ./docker/db/master.cnf:/etc/mysql/mysql.conf.d/mysqld.cnf
+    mem_limit: 6000M
+
+  redis:
+    image: redis:6.2.3-alpine
+    volumes:
+      - ./.data_redis:/data
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8081:8080
+
+  app:
+    tty: true
+    mem_limit: 1500M
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    image: &app socnet-app
+    environment:
+      WAIT_HOSTS: db:3306
+#      WAIT_HOSTS: db:3306, db_balancer:3306, db_balancer:3307
+      WAIT_HOSTS_TIMEOUT: 300
+      WAIT_SLEEP_INTERVAL: 30
+      WAIT_HOST_CONNECT_TIMEOUT: 30
+      FERNET_KEY: 'sIv6jBFwPkNSZP4gVUmzQUnsaMs7g1g7UMRStf5RpCM='
+
+      DATABASE_URL: mysql://socnet:socnetpass@db:3306/socnet
+
+      REDIS_URL: redis://redis:6379
+
+      # frontend
+      CHAT_URL: http://127.0.0.1:3000/
+      CHAT_REST_URL: http://chat_backend:8081/
+#      CHAT_REST_URL: http://nginx:8081/
+
+      COUNTERS_URL: http://127.0.0.1:3001/
+
+      JAEGER_ADDRESS: http://jaeger:9411/api/v2/spans
+    ports:
+      - 127.0.0.1:8080:8080
+    command: ash -c "/wait && python server.py"
+    volumes:
+      - ./:/app
+    depends_on:
+      - db
+      - redis
+
+  chat_backend:
+    extends:
+      file: ./services/chat/docker-compose.yml
+      service: backend
+    deploy:
+      replicas: 1
+    environment:
+#      INSTANCE_ID: "{{.Task.Slot}}"
+      SERVICE_8080_NAME: chat_backend
+      SERVICE_8081_NAME: chat_backend_rest
+      JAEGER_ADDRESS: http://jaeger:9411/api/v2/spans
+      COUNTERS_REST_URL: http://counters:8081
+    ports:
+    - 8181:8081
+    - 8088:8080
+
+#  chat_backend_2:
+#    extends:
+#      file: ./services/chat/docker-compose.yml
+#      service: backend
+#    environment:
+#      INSTANCE_ID: 2
+#      SERVICE_8080_NAME: chat_backend
+#      SERVICE_8081_NAME: chat_backend_rest
+#      JAEGER_ADDRESS: http://jaeger:9411/api/v2/spans
+#      COUNTERS_REST_URL: http://counters:8081
+
+  chat_frontend:
+    extends:
+      file: ./services/chat/docker-compose.yml
+      service: frontend
+#      service: frontend-dev
+
+  db_shard_1:
+    extends:
+      file: ./services/chat/docker-compose.yml
+      service: db_shard_1
+    environment:
+      SERVICE_NAME: chat_db_shard
+
+  db_shard_2:
+    extends:
+      file: ./services/chat/docker-compose.yml
+      service: db_shard_2
+    environment:
+      SERVICE_NAME: chat_db_shard
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      SERVICE_NAME: jaeger
+      COLLECTOR_ZIPKIN_HOST_PORT: ':9411'
+    ports:
+      - "6831:6831/udp"
+
+      # fronetned: 16686
+      - "16686:16686"
+
+      - "5775:5775/udp"
+
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "14268:14268"
+      - "14250:14250"
+      - "9411:9411"
+
+  counters:
+    extends:
+      service: backend
+      file: ./services/counters/docker-compose.yml
+    environment:
+      INSTANCE: counters
+      DATABASE_URL: mysql://socnet:socnetpass@db:3306/socnet
+      JAEGER_ADDRESS: http://jaeger:9411/api/v2/spans
+      REST_PORT: 8081
+
+
+  prometheus:
+    user: "1000"
+    image: prom/prometheus:v2.29.1
+    volumes:
+      - ./docker/prometheus/:/etc/prometheus/
+      - ./.data_prometheus:/prometheus:rw
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - 9090:9090
+#      - pushgateway:pushgateway
+#    depends_on:
+#      - cadvisor
+#          - pushgateway
+    restart: always
+
+  grafana:
+    image: grafana/grafana:8.1.1
+    user: "1000"
+    environment:
+      GF_INSTALL_PLUGINS: alexanderzobnin-zabbix-app
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: alexanderzobnin-zabbix-datasource
+      GF_LOG_LEVEL: debug
+    depends_on:
+      - prometheus
+    ports:
+      - 3002:3000
+    volumes:
+      - ./.data_grafana:/var/lib/grafana:rw
+#      - ./docker/grafana/provisioning/:/etc/grafana/provisioning/
+#    env_file:
+#      - ./grafana/config.monitoring
+#    networks:
+#      - back-tier
+#      - front-tier
+    restart: always
+
+  zabbix_web:
+    image: zabbix/zabbix-web-nginx-mysql:alpine-5.4-latest
+    environment:
+      DB_SERVER_HOST: zabbix_mysql
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: password
+      ZBX_SERVER_NAME: zabbix_server
+      ZBX_SERVER_HOST: zabbix_server
+    depends_on:
+      - zabbix_mysql
+      - zabbix_server
+      - zabbix_agent
+    ports:
+      - "83:8080"
+
+  zabbix_server:
+    image: zabbix/zabbix-server-mysql:alpine-5.4-latest
+    environment:
+      DB_SERVER_HOST: zabbix_mysql
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: password
+    depends_on:
+      - zabbix_mysql
+    ports:
+      - "10051:10051"
+
+  zabbix_mysql:
+    image: mysql:5.7.33
+    command: --character-set-server=utf8 --collation-server=utf8_bin
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: password
+      LANG: C.UTF-8
+    volumes:
+      - ./.data_zabbix_mysql:/var/lib/mysql
+    mem_limit: 6000M
+
+  zabbix_agent:
+    user: "root"
+    hostname: zabbix-agent
+    restart: unless-stopped
+    image: zabbix/zabbix-agent2:alpine-5.4-latest
+    cap_add:
+      - SYS_ADMIN
+    environment:
+      - ZBX_HOSTNAME=zabbix_agent
+      - ZBX_DEBUGLEVEL=4
+      - ZBX_ENABLEREMOTECOMMANDS=1
+      - ZBX_SERVER_HOST=zabbix_server
+    volumes:
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /dev:/host/dev:ro
+      - ./docker/zabbix/etc/zabbix/zabbix_agentd.d:/etc/zabbix/zabbix_agentd.d/:ro
+    depends_on:
+      - zabbix_server

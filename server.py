@@ -37,6 +37,7 @@ from userlist import hanlde_del_friend
 from userlist import hanlde_userlist
 from userpage import handle_chat
 from userpage import handle_userpage
+from zipkin_monkeypatch import _set_span_properties
 
 STATIC_DIR = 'static'
 TEMPLATE_DIR = 'templates'
@@ -111,6 +112,7 @@ async def make_app(host, port):
     app['tasks'] = []
 
     jaeger_address = os.getenv('JAEGER_ADDRESS')
+    az.aiohttp_helpers._set_span_properties = _set_span_properties
     if jaeger_address:
         endpoint = az.create_endpoint(f"social_net_server_{app['instance_id']}", ipv4=host, port=port)
         tracer = await az.create(jaeger_address, endpoint, sample_rate=1.0)
